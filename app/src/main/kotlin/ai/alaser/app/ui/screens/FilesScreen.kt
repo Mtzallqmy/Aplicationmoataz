@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -115,7 +115,7 @@ fun FilesScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Icon(
-                            if (entry.directory) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
+                            if (entry.directory) Icons.Outlined.Folder else Icons.AutoMirrored.Outlined.InsertDriveFile,
                             contentDescription = if (entry.directory) "Folder" else "File",
                             tint = MaterialTheme.colorScheme.primary,
                         )

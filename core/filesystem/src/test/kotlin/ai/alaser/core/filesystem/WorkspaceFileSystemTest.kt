@@ -64,5 +64,6 @@ class WorkspaceFileSystemTest {
         runCatching { filesystem.extractZip(archive, "import") }
             .onSuccess { error("Expected an unsafe archive to be rejected.") }
             .onFailure { assertTrue(it is WorkspaceAccessException) }
+        Unit
     }
 }
