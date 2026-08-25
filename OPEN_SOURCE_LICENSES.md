@@ -2,6 +2,13 @@
 
 ## Intended direct dependency licenses
 
+- Agora tool-call argument accumulator: MIT, Copyright (c) 2026 newo-ether.
+  Full notice bundled at `assets/licenses/AGORA-MIT.txt`.
+- Lociant explicit tool execution policy: MIT, Copyright (c) 2026 Lociant
+  Contributors. Full notice bundled at `assets/licenses/LOCIANT-MIT.txt`.
+- RikkaHub (AGPL-3.0), GPT Mobile (GPL-3.0), and AIOPE (Business Source
+  License 1.1) are architecture references only; none of their code or
+  binaries are copied, linked, or distributed.
 - Bundled PRoot 5.4.0-r2: GPL-2.0-or-later, distributed unmodified as a
   separate executable. Upstream corresponding source: https://github.com/proot-me/proot.
 - Bundled Alpine Linux 3.24.1: each included Alpine package retains its own

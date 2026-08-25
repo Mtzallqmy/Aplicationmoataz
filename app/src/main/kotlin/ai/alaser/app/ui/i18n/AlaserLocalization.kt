@@ -78,6 +78,8 @@ private val translations = mapOf(
     "AI Providers" to "مزودو الذكاء الاصطناعي",
     "API key" to "مفتاح API",
     "About" to "حول التطبيق",
+    "Open-source acknowledgements" to "شكر وإسناد المشاريع مفتوحة المصدر",
+    "Architecture references" to "المراجع المعمارية",
     "Action could not be completed" to "تعذّر إكمال العملية",
     "Active for this project" to "نشطة لهذا المشروع",
     "Add" to "إضافة",

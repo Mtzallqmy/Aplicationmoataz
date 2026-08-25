@@ -176,6 +176,6 @@ class AgentRuntime(
     private class PendingToolCall {
         var id: String? = null
         var name: String? = null
-        val arguments = StringBuilder()
+        val arguments = ToolArgumentAccumulator()
     }
 }

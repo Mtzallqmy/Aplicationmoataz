@@ -95,6 +95,18 @@ fun SettingsScreen(
         item {
             InformationCard("About", "Alaser AI 0.1.0 · Mobile AI development workspace")
         }
+        item {
+            InformationCard(
+                "Open-source acknowledgements",
+                "Agora (MIT): resilient tool-call streaming · Lociant (MIT): explicit execution policies",
+            )
+        }
+        item {
+            InformationCard(
+                "Architecture references",
+                "RikkaHub (AGPL-3.0) · GPT Mobile (GPL-3.0) · AIOPE (Business Source License; no copied code)",
+            )
+        }
     }
 }
 

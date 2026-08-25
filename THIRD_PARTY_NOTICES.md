@@ -10,6 +10,24 @@ The architecture was informed by the official upstream projects:
 - OpenHands: https://github.com/OpenHands/OpenHands
 - Termux Android application: https://github.com/termux/termux-app
 - PRoot-Distro: https://github.com/termux/proot-distro
+- RikkaHub: https://github.com/rikkahub/rikkahub (AGPL-3.0; architecture reference only)
+- GPT Mobile: https://github.com/Taewan-P/gpt_mobile (GPL-3.0; architecture reference only)
+- AIOPE: https://github.com/XNet-NGO/aiope (Business Source License 1.1;
+  modification and redistribution are prohibited; no code or binaries copied)
+
+## Incorporated MIT-licensed components
+
+Agora, https://github.com/newo-ether/Agora, Copyright (c) 2026 newo-ether.
+`agent/runtime/.../ToolArgumentAccumulator.kt` adapts Agora's defensive tool
+argument accumulator. It correctly accepts incremental streaming, duplicate
+snapshots, growing snapshots, and empty provider fragments. The complete MIT
+license is distributed inside the APK at `assets/licenses/AGORA-MIT.txt`.
+
+Lociant, https://github.com/lhxll07/Lociant, Copyright (c) 2026 Lociant
+Contributors. `agent/runtime/.../ToolExecutionPolicy.kt` adapts Lociant's
+explicit local/remote, side-effect, destructive, and open-world execution
+policy. The complete MIT license is distributed inside the APK at
+`assets/licenses/LOCIANT-MIT.txt`.
 
 Runtime and build dependencies are declared in gradle/libs.versions.toml.
 Their licenses are summarized in docs/licenses/dependency-audit.md and must be

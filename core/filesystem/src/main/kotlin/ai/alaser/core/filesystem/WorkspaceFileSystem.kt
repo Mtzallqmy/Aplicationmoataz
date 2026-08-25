@@ -17,6 +17,8 @@ data class WorkspaceFileEntry(
     val modifiedAt: Long,
 )
 
+data class WorkspaceSearchMatch(val path: String, val lineNumber: Int, val content: String)
+
 class WorkspaceAccessException(message: String) : SecurityException(message)
 
 class WorkspaceFileSystem(root: File) {
@@ -121,6 +123,52 @@ class WorkspaceFileSystem(root: File) {
             }.limit(limit.toLong()).map(::entry).collect(Collectors.toList())
         }
     }
+
+    suspend fun stat(path: String): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        entry(resolve(path))
+    }
+
+    suspend fun tree(path: String = ".", limit: Int = 250): List<WorkspaceFileEntry> = withContext(Dispatchers.IO) {
+        val start = resolve(path)
+        Files.walk(start).use { stream ->
+            stream.filter { candidate ->
+                candidate != start &&
+                    rootPath.relativize(candidate).none { it.toString() in IGNORED_DIRECTORIES } &&
+                    !isSensitive(candidate.fileName.toString())
+            }.limit(limit.toLong()).map(::entry).collect(Collectors.toList())
+        }
+    }
+
+    suspend fun searchContent(query: String, limit: Int = 100): List<WorkspaceSearchMatch> =
+        withContext(Dispatchers.IO) {
+            require(query.isNotBlank()) { "A search expression is required." }
+            val expression = runCatching { Regex(query, RegexOption.IGNORE_CASE) }
+                .getOrElse { throw IllegalArgumentException("Invalid search expression: " + it.message) }
+            val matches = mutableListOf<WorkspaceSearchMatch>()
+            Files.walk(rootPath).use { stream ->
+                val iterator = stream.iterator()
+                while (iterator.hasNext() && matches.size < limit) {
+                    val candidate = iterator.next()
+                    if (!Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) ||
+                        Files.size(candidate) > 1_000_000 ||
+                        rootPath.relativize(candidate).any { it.toString() in IGNORED_DIRECTORIES } ||
+                        isSensitive(candidate.fileName.toString())
+                    ) continue
+                    val bytes = Files.readAllBytes(candidate)
+                    if (bytes.take(4096).any { it == 0.toByte() }) continue
+                    bytes.toString(Charsets.UTF_8).lineSequence().forEachIndexed { index, line ->
+                        if (matches.size < limit && expression.containsMatchIn(line)) {
+                            matches += WorkspaceSearchMatch(
+                                rootPath.relativize(candidate).toString(),
+                                index + 1,
+                                line.take(500),
+                            )
+                        }
+                    }
+                }
+            }
+            matches
+        }
 
     suspend fun extractZip(archive: File, destination: String): Int = withContext(Dispatchers.IO) {
         val targetRoot = resolve(destination)

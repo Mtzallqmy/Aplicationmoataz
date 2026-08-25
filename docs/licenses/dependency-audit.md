@@ -20,6 +20,11 @@ Audit date: 2026-08-25.
 | Ubuntu developer packages | archive.ubuntu.com / ports.ubuntu.com | Ubuntu 24.04 package versions | GPL/LGPL/Apache/MIT and other per-package licenses | Offline Python, Git, Node, Java, Go, Rust, GCC and utilities | Official unmodified packages |
 | JUnit 4 | github.com/junit-team/junit4 | 4.13.2 | EPL-1.0 | Unit tests only | No |
 | OpenCode | github.com/anomalyco/opencode | Reference only | MIT | Agent architecture reference | No |
+| Agora | github.com/newo-ether/Agora | Reviewed 2026-08-25 | MIT, Copyright (c) 2026 newo-ether | Defensive streamed tool-argument accumulator | Yes; adapted with full bundled MIT notice |
+| Lociant | github.com/lhxll07/Lociant | Reviewed 2026-08-25 | MIT, Copyright (c) 2026 Lociant Contributors | Explicit local execution and side-effect policy | Yes; adapted with full bundled MIT notice |
+| RikkaHub | github.com/rikkahub/rikkahub | Reference only | AGPL-3.0 | Multi-provider Android architecture reference | No; no copyleft-covered code copied |
+| GPT Mobile | github.com/Taewan-P/gpt_mobile | Reference only | GPL-3.0 | Provider and agent persistence architecture reference | No; no copyleft-covered code copied |
+| AIOPE | github.com/XNet-NGO/aiope | Reference only | Business Source License 1.1; modification and redistribution prohibited | Android terminal/tool architecture reference | No; copying and redistribution prohibited |
 | Cline | github.com/cline/cline | Reference only | Apache-2.0 | Approval/tool architecture reference | No |
 | Termux app | github.com/termux/termux-app | Reference only | GPL-3.0-only; terminal-view and terminal-emulator exceptions Apache-2.0 | Android terminal reference | No |
 | PRoot-Distro | github.com/termux/proot-distro | Reference only | GPL terms; review source tree before use | Rootfs lifecycle reference | No |

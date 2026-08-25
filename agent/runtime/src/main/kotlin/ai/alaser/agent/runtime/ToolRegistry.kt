@@ -25,6 +25,7 @@ class ToolRegistry(
 
     val tools: List<ToolDescriptor> = listOf(
         descriptor("read_file", "Read a UTF-8 text file inside the active workspace.", RiskLevel.SAFE, "path"),
+        descriptor("create_file", "Create a new UTF-8 file without overwriting an existing file.", RiskLevel.WRITE, "path", "content"),
         descriptor("write_file", "Create or replace a UTF-8 file inside the active workspace.", RiskLevel.WRITE, "path", "content"),
         descriptor("replace_text", "Replace matching text in an existing workspace file.", RiskLevel.WRITE, "path", "old_text", "new_text"),
         descriptor("move_file", "Rename or move a file within the active workspace.", RiskLevel.WRITE, "source", "destination"),
@@ -33,7 +34,12 @@ class ToolRegistry(
         descriptor("create_directory", "Create a directory inside the active workspace.", RiskLevel.WRITE, "path"),
         descriptor("delete_file", "Delete one empty directory or one file inside the active workspace.", RiskLevel.DANGEROUS, "path"),
         descriptor("search_files", "Search workspace filenames while ignoring generated directories.", RiskLevel.SAFE, "query"),
+        descriptor("grep", "Search file contents using a case-insensitive regular expression.", RiskLevel.SAFE, "query"),
+        descriptor("project_search", "Search project file contents using a regular expression.", RiskLevel.SAFE, "query"),
+        descriptor("project_tree", "List the project tree while ignoring generated and sensitive paths.", RiskLevel.SAFE, "path"),
+        descriptor("stat_file", "Read metadata for a workspace path.", RiskLevel.SAFE, "path"),
         descriptor("shell_exec", "Execute a shell command with the active workspace as its working directory.", RiskLevel.DANGEROUS, "command"),
+        descriptor("list_processes", "List processes visible in the selected execution environment.", RiskLevel.SAFE),
         descriptor("git_status", "Read the short Git working-tree status.", RiskLevel.SAFE),
         descriptor("git_diff", "Read the Git diff for the active workspace.", RiskLevel.SAFE),
         descriptor("git_log", "Read the latest Git commit history.", RiskLevel.SAFE),
@@ -43,12 +49,25 @@ class ToolRegistry(
     fun assess(invocation: ToolInvocation): RiskLevel {
         val descriptor = tools.firstOrNull { it.name == invocation.name }
             ?: throw IllegalArgumentException("Unknown tool: " + invocation.name)
+        val executionPolicy = policy(invocation.name)
+        val declaredRisk = when {
+            executionPolicy.destructive || executionPolicy.openWorld -> maxOf(descriptor.riskLevel, RiskLevel.DANGEROUS)
+            executionPolicy.sideEffect -> maxOf(descriptor.riskLevel, RiskLevel.WRITE)
+            else -> descriptor.riskLevel
+        }
         return if (invocation.name == "shell_exec") {
             val commandRisk = riskAnalyzer.assess(requireArgument(invocation.arguments, "command")).level
-            maxOf(descriptor.riskLevel, commandRisk)
+            maxOf(declaredRisk, commandRisk)
         } else {
-            descriptor.riskLevel
+            declaredRisk
         }
+    }
+
+    fun policy(toolName: String): ToolExecutionPolicy = when (toolName) {
+        "delete_file" -> ToolExecutionPolicy(sideEffect = true, destructive = true)
+        "shell_exec" -> ToolExecutionPolicy(sideEffect = true, openWorld = true)
+        in MUTATING_TOOLS -> ToolExecutionPolicy(sideEffect = true)
+        else -> ToolExecutionPolicy()
     }
 
     suspend fun execute(invocation: ToolInvocation): ToolExecutionResult = try {
@@ -58,6 +77,12 @@ class ToolRegistry(
         }
         when (invocation.name) {
             "read_file" -> result(invocation, filesystem.readText(requireArgument(invocation.arguments, "path")))
+            "create_file" -> {
+                val path = requireArgument(invocation.arguments, "path")
+                require(!java.nio.file.Files.exists(filesystem.resolve(path))) { "The file already exists." }
+                val entry = filesystem.writeText(path, requireArgument(invocation.arguments, "content"))
+                result(invocation, "Created " + entry.path + " (" + entry.size + " bytes).")
+            }
             "write_file" -> {
                 val entry = filesystem.writeText(
                     requireArgument(invocation.arguments, "path"),
@@ -104,7 +129,22 @@ class ToolRegistry(
                 invocation,
                 filesystem.search(requireArgument(invocation.arguments, "query")).joinToString("\n") { it.path },
             )
+            "grep", "project_search" -> result(
+                invocation,
+                filesystem.searchContent(requireArgument(invocation.arguments, "query"))
+                    .joinToString("\n") { it.path + ":" + it.lineNumber + ": " + it.content },
+            )
+            "project_tree" -> result(
+                invocation,
+                filesystem.tree(optionalArgument(invocation.arguments, "path") ?: ".")
+                    .joinToString("\n") { (if (it.directory) "DIR  " else "FILE ") + it.path },
+            )
+            "stat_file" -> {
+                val stat = filesystem.stat(requireArgument(invocation.arguments, "path"))
+                result(invocation, "path=${stat.path}\ntype=${if (stat.directory) "directory" else "file"}\nsize=${stat.size}\nmodified=${stat.modifiedAt}")
+            }
             "shell_exec" -> command(invocation, requireArgument(invocation.arguments, "command"))
+            "list_processes" -> command(invocation, "ps -A -o pid,ppid,state,comm,args 2>/dev/null || ps -A")
             "git_status" -> command(invocation, "git status --short")
             "git_diff" -> command(invocation, "git diff --no-ext-diff")
             "git_log" -> command(invocation, "git log --oneline -30")
@@ -142,7 +182,7 @@ class ToolRegistry(
     companion object {
         private const val MAX_OUTPUT_CHARS = 100_000
         private val MUTATING_TOOLS = setOf(
-            "write_file", "replace_text", "move_file", "copy_file", "create_directory", "delete_file", "shell_exec",
+            "create_file", "write_file", "replace_text", "move_file", "copy_file", "create_directory", "delete_file", "shell_exec",
         )
 
         private fun descriptor(

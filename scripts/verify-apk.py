@@ -40,6 +40,11 @@ def main() -> int:
                 raise ValueError(f"Bundled Ubuntu developer rootfs checksum mismatch for {abi}")
             print(f"{abi}: verified Ubuntu developer rootfs with complete toolchains ({len(ubuntu):,} bytes)")
 
+        for notice in ("assets/licenses/AGORA-MIT.txt", "assets/licenses/LOCIANT-MIT.txt"):
+            content = package.read(notice).decode()
+            if "MIT License" not in content or "Permission is hereby granted" not in content:
+                raise ValueError(f"Incomplete third-party license notice: {notice}")
+
     print("APK offline Linux runtime verification passed.")
     return 0
 

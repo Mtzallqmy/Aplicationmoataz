@@ -52,6 +52,32 @@ class WorkspaceFileSystemTest {
     }
 
     @Test
+    fun searchesProjectContentAndReturnsLineNumbers() = runBlocking {
+        val filesystem = WorkspaceFileSystem(temporary.newFolder("search-workspace"))
+        filesystem.writeText("src/Main.kt", "fun main() {\n    println(\"Alaser\")\n}\n")
+        filesystem.writeText("src/Other.kt", "val other = true\n")
+
+        val matches = filesystem.searchContent("print.*Alaser")
+
+        assertEquals(1, matches.size)
+        assertEquals("src/Main.kt", matches.single().path.replace('\\', '/'))
+        assertEquals(2, matches.single().lineNumber)
+    }
+
+    @Test
+    fun projectTreeSkipsGeneratedDirectories() = runBlocking {
+        val root = temporary.newFolder("tree-workspace")
+        val filesystem = WorkspaceFileSystem(root)
+        filesystem.writeText("src/app.kt", "content")
+        File(root, "node_modules/package").apply { parentFile.mkdirs(); writeText("ignored") }
+
+        val paths = filesystem.tree().map { it.path.replace('\\', '/') }
+
+        assertTrue("src/app.kt" in paths)
+        assertTrue(paths.none { it.startsWith("node_modules") })
+    }
+
+    @Test
     fun copiesMovesAndReplacesFilesWithinWorkspace() = runBlocking {
         val filesystem = WorkspaceFileSystem(temporary.newFolder("managed-workspace"))
         filesystem.writeText("src/input.txt", "hello original")
