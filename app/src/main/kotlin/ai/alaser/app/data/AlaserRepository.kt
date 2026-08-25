@@ -69,9 +69,13 @@ class AlaserRepository(context: Context) {
     }
 
     fun provider(configuration: ProviderConfiguration): OpenAiCompatibleProvider =
-        OpenAiCompatibleProvider(configuration) {
-            secrets.get(configuration.secretId) ?: error("The encrypted provider credential is unavailable.")
-        }
+        OpenAiCompatibleProvider(
+            configuration = configuration,
+            apiKey = {
+                secrets.get(configuration.secretId)
+                    ?: error("The encrypted provider credential is unavailable.")
+            },
+        )
 
     suspend fun testProvider(configuration: ProviderConfiguration): ProviderConnectionResult =
         provider(configuration).testConnection()
