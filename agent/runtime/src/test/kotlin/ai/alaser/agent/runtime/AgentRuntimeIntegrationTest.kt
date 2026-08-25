@@ -4,6 +4,7 @@ import ai.alaser.ai.providers.AiProvider
 import ai.alaser.ai.providers.ModelRequest
 import ai.alaser.ai.providers.ModelStreamEvent
 import ai.alaser.ai.providers.ProviderConnectionResult
+import ai.alaser.ai.providers.ProviderException
 import ai.alaser.core.filesystem.WorkspaceFileSystem
 import ai.alaser.core.model.AgentMode
 import ai.alaser.core.model.ApprovalDecision
@@ -55,7 +56,37 @@ class AgentRuntimeIntegrationTest {
         terminal.close()
     }
 
-    private class ScriptedProvider : AiProvider {
+    @Test
+    fun retriesRateLimitedModelWithoutReplayingTools() = runBlocking {
+        val root = temporary.newFolder("retry-workspace")
+        val filesystem = WorkspaceFileSystem(root)
+        val terminal = ProcessTerminal()
+        val runtime = AgentRuntime(
+            provider = ScriptedProvider(initialRateLimits = 1),
+            registry = ToolRegistry(filesystem, terminal),
+            approvals = ApprovalEngine { ApprovalDecision.ALLOW_ONCE },
+        )
+        val prompt = ChatMessage(
+            id = "retry-message",
+            sessionId = "retry-session",
+            role = MessageRole.USER,
+            parts = listOf(MessagePart.Text("Create hello.txt and print it.")),
+            createdAt = 0,
+        )
+
+        val conversation = runtime.run("retry-session", "fake-model", AgentMode.BUILD, listOf(prompt))
+
+        assertEquals("hello world", filesystem.readText("hello.txt"))
+        assertEquals(
+            1,
+            conversation.flatMap { it.parts }
+                .filterIsInstance<MessagePart.ToolResult>()
+                .count { it.name == "write_file" },
+        )
+        terminal.close()
+    }
+
+    private class ScriptedProvider(private var initialRateLimits: Int = 0) : AiProvider {
         override val id = "fake"
         override val displayName = "Test-only scripted provider"
         private var requestNumber = 0
@@ -67,6 +98,10 @@ class AgentRuntimeIntegrationTest {
             ProviderConnectionResult(true, 0, 200)
 
         override fun streamChat(request: ModelRequest): Flow<ModelStreamEvent> = flow {
+            if (initialRateLimits > 0) {
+                initialRateLimits -= 1
+                throw ProviderException("Rate limited", statusCode = 429, retryable = true)
+            }
             when (requestNumber++) {
                 0 -> emit(
                     ModelStreamEvent.ToolCallDelta(

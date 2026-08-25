@@ -21,7 +21,7 @@ jobs:
         with:
           gradle-version: "8.10.2"
       - name: Compile app and verify core modules before preparing Ubuntu
-        run: gradle :app:compileDebugKotlin :core:filesystem:test :core:terminal:test
+        run: gradle :app:compileDebugKotlin :core:filesystem:test :core:terminal:test :ai:providers:test :agent:runtime:test
       - name: Enable ARM64 Ubuntu image preparation
         uses: docker/setup-qemu-action@v3
         with:

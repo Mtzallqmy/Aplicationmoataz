@@ -3,6 +3,7 @@ package ai.alaser.agent.runtime
 import ai.alaser.ai.providers.AiProvider
 import ai.alaser.ai.providers.ModelRequest
 import ai.alaser.ai.providers.ModelStreamEvent
+import ai.alaser.ai.providers.ProviderException
 import ai.alaser.core.model.AgentMode
 import ai.alaser.core.model.AgentState
 import ai.alaser.core.model.ChatMessage
@@ -11,6 +12,7 @@ import ai.alaser.core.model.MessageRole
 import ai.alaser.core.model.ToolInvocation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,26 +57,41 @@ class AgentRuntime(
                 val text = StringBuilder()
                 val pendingCalls = linkedMapOf<Int, PendingToolCall>()
 
-                provider.streamChat(
-                    ModelRequest(
-                        modelId = modelId,
-                        messages = conversation,
-                        tools = if (mode == AgentMode.ASK) emptyList() else registry.tools,
-                    ),
-                ).collect { event ->
-                    when (event) {
-                        is ModelStreamEvent.TextDelta -> {
-                            text.append(event.text)
-                            eventsValue.emit(AgentEvent.TextDelta(event.text))
+                var retryCount = 0
+                while (true) {
+                    try {
+                        provider.streamChat(
+                            ModelRequest(
+                                modelId = modelId,
+                                messages = conversation,
+                                tools = if (mode == AgentMode.ASK) emptyList() else registry.tools,
+                            ),
+                        ).collect { event ->
+                            when (event) {
+                                is ModelStreamEvent.TextDelta -> {
+                                    text.append(event.text)
+                                    eventsValue.emit(AgentEvent.TextDelta(event.text))
+                                }
+                                is ModelStreamEvent.ToolCallDelta -> {
+                                    val pending = pendingCalls.getOrPut(event.index) { PendingToolCall() }
+                                    if (event.id != null) pending.id = event.id
+                                    if (event.name != null) pending.name = event.name
+                                    pending.arguments.append(event.arguments)
+                                }
+                                is ModelStreamEvent.Usage -> Unit
+                                ModelStreamEvent.Completed -> Unit
+                            }
                         }
-                        is ModelStreamEvent.ToolCallDelta -> {
-                            val pending = pendingCalls.getOrPut(event.index) { PendingToolCall() }
-                            if (event.id != null) pending.id = event.id
-                            if (event.name != null) pending.name = event.name
-                            pending.arguments.append(event.arguments)
+                        break
+                    } catch (failure: ProviderException) {
+                        // Never replay a partially observed response or an executed tool.
+                        if (!failure.retryable || retryCount >= 2 || text.isNotEmpty() || pendingCalls.isNotEmpty()) {
+                            throw failure
                         }
-                        is ModelStreamEvent.Usage -> Unit
-                        ModelStreamEvent.Completed -> Unit
+                        retryCount += 1
+                        transition(AgentState.RETRYING, "Retrying the model after HTTP " + failure.statusCode)
+                        delay(250L * (1 shl (retryCount - 1)))
+                        transition(AgentState.WAITING_MODEL, "Waiting for the selected model")
                     }
                 }
 
