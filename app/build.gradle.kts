@@ -36,6 +36,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    androidResources {
+        // Rootfs images are already gzip-compressed; deflating them again wastes
+        // substantial build memory and CPU without reducing the installed APK.
+        noCompress += "rootfs"
+    }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
