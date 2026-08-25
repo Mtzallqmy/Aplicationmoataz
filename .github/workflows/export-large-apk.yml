@@ -1,0 +1,49 @@
+name: Export large offline APK
+
+on:
+  push:
+    paths:
+      - .github/workflows/export-large-apk.yml
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Retrieve verified offline Ubuntu APK
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 32885879932
+          name: alaser-debug-apk
+      - name: Record checksum and divide APK for connector transfer
+        run: |
+          mkdir -p transfer
+          sha256sum app-debug.apk | tee transfer/SHA256SUMS
+          split -b 450m -d -a 2 app-debug.apk transfer/alaser-apk.part-
+          ls -lh app-debug.apk transfer
+      - name: Upload part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: alaser-apk-part-00
+          path: transfer/alaser-apk.part-00
+          compression-level: 0
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: alaser-apk-part-01
+          path: transfer/alaser-apk.part-01
+          compression-level: 0
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: alaser-apk-part-02
+          path: transfer/alaser-apk.part-02
+          compression-level: 0
+      - name: Upload checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: alaser-apk-checksum
+          path: transfer/SHA256SUMS
