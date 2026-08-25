@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.Alaser" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#111520</item>
+        <item name="android:navigationBarColor">#111520</item>
+        <item name="android:windowBackground">#111520</item>
+    </style>
+</resources>
