@@ -28,7 +28,16 @@ jobs:
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
+      - name: Restore verified ARM64 Linux runtime cache
+        id: linux-runtime-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/assets/linux
+            app/src/main/jniLibs/arm64-v8a/libproot_exec.so
+          key: alaser-linux-arm64-${{ hashFiles('scripts/prepare-linux-runtime.sh') }}
       - name: Prepare verified offline Linux runtime
+        if: steps.linux-runtime-cache.outputs.cache-hit != 'true'
         run: bash scripts/prepare-linux-runtime.sh
       - name: Verify bundled ARM64 PRoot and real Linux root filesystems
         run: bash scripts/verify-linux-runtime.sh

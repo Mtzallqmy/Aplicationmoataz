@@ -15,7 +15,7 @@ echo "The bundled static PRoot is an executable ARM64 build."
 # user-mode emulation. Importing the exact bundled archives into Docker runs
 # every ARM64 userspace binary through the configured binfmt/QEMU handler and
 # validates the root filesystems without producing a false ptrace failure.
-alaser_alpine_image="$(docker import "$alaser_root/app/src/main/assets/linux/alpine-aarch64.rootfs")"
+alaser_alpine_image="$(docker import --platform linux/arm64 "$alaser_root/app/src/main/assets/linux/alpine-aarch64.rootfs")"
 docker run --rm --platform linux/arm64 \
     --volume "$alaser_staging/workspace:/workspace" \
     "$alaser_alpine_image" \
@@ -23,7 +23,7 @@ docker run --rm --platform linux/arm64 \
 [[ "$(cat "$alaser_staging/workspace/alpine-check.txt")" == "verified" ]]
 echo "The bundled Alpine ARM64 rootfs starts and writes to its workspace."
 
-alaser_ubuntu_image="$(docker import "$alaser_root/app/src/main/assets/linux/ubuntu-arm64.rootfs")"
+alaser_ubuntu_image="$(docker import --platform linux/arm64 "$alaser_root/app/src/main/assets/linux/ubuntu-arm64.rootfs")"
 docker run --rm --platform linux/arm64 \
     --volume "$alaser_staging/workspace:/workspace" \
     "$alaser_ubuntu_image" \
