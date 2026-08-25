@@ -5,7 +5,7 @@ alaser_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 alaser_staging="$(mktemp -d)"
 trap 'rm -rf "$alaser_staging"' EXIT
 mkdir -p "$alaser_staging/rootfs" "$alaser_staging/workspace" "$alaser_staging/tmp"
-tar -xzf "$alaser_root/app/src/main/assets/linux/alpine-x86_64.tar.gz" -C "$alaser_staging/rootfs"
+tar -xzf "$alaser_root/app/src/main/assets/linux/alpine-x86_64.rootfs" -C "$alaser_staging/rootfs"
 
 output="$(
     PROOT_TMP_DIR="$alaser_staging/tmp" \

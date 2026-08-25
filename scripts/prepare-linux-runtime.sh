@@ -17,7 +17,8 @@ prepare_architecture() {
     local rootfs="alpine-minirootfs-${alaser_version}-${alpine_arch}.tar.gz"
     local rootfs_url="$base/v3.24/releases/$alpine_arch/$rootfs"
     local package_url="$base/v3.24/community/$alpine_arch/proot-static-${alaser_proot_version}.apk"
-    local rootfs_file="$alaser_assets/alpine-$alpine_arch.tar.gz"
+    # AAPT transparently unpacks assets ending in .gz; keep the verified bytes intact.
+    local rootfs_file="$alaser_assets/alpine-$alpine_arch.rootfs"
     local package_file="$alaser_staging/proot-$alpine_arch.apk"
     local extracted="$alaser_staging/$alpine_arch"
     local jni_directory="$alaser_root/app/src/main/jniLibs/$android_abi"
@@ -35,7 +36,7 @@ prepare_architecture() {
     install -m 0755 "$extracted/usr/bin/proot.static" "$jni_directory/libproot_exec.so"
     file "$jni_directory/libproot_exec.so"
 
-    printf '%s.filename=alpine-%s.tar.gz\n' "$android_abi" "$alpine_arch" >> "$alaser_assets/manifest.properties"
+    printf '%s.filename=alpine-%s.rootfs\n' "$android_abi" "$alpine_arch" >> "$alaser_assets/manifest.properties"
     printf '%s.sha256=%s\n' "$android_abi" "$expected" >> "$alaser_assets/manifest.properties"
     printf '%s.version=%s\n' "$android_abi" "$alaser_version" >> "$alaser_assets/manifest.properties"
 }
