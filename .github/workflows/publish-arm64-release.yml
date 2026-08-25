@@ -1,0 +1,65 @@
+name: Publish Alaser AI ARM64 Release
+
+on:
+  push:
+    paths:
+      - .github/workflows/publish-arm64-release.yml
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download verified Android 8+ ARM64 release ZIP
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 32889661210
+          name: Alaser-AI-ARM64-Android8-ZIP
+
+      - name: Verify ZIP integrity and packaged Android APK
+        shell: bash
+        run: |
+          printf '%s  %s\n' \
+            'acd3e4141f7a157d5012b43878566e361d29fbf1f6da77b8f1f921e0bc3fca03' \
+            'Alaser-AI-ARM64-Android8.zip' | sha256sum --check
+          unzip -t Alaser-AI-ARM64-Android8.zip
+
+      - name: Create GitHub Release and upload direct-download ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          release_tag='v0.1.0-arm64-android8'
+          release_name='Alaser AI v0.1.0 — ARM64 Android 8+'
+          release_notes='نسخة Alaser AI الجاهزة للتثبيت على أجهزة Android 8.0 فأحدث بمعمارية ARM64.
+
+          تتضمن Ubuntu وAlpine وPRoot والطرفية وPython وGit وNode.js وnpm وJava وRust وGo وأدوات التطوير.
+
+          الملف: Alaser-AI-ARM64-Android8.zip
+          الحجم: نحو 640 ميجابايت.
+          فك الضغط ثم ثبّت ملف APK الموجود داخله.
+
+          ZIP SHA-256: acd3e4141f7a157d5012b43878566e361d29fbf1f6da77b8f1f921e0bc3fca03
+          APK SHA-256: d5e44706e20732196dc3f549912cd638521b86ea27f136e510075a62f08493c6'
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" Alaser-AI-ARM64-Android8.zip --clobber
+          else
+            gh release create "$release_tag" Alaser-AI-ARM64-Android8.zip \
+              --target "$GITHUB_SHA" \
+              --title "$release_name" \
+              --notes "$release_notes" \
+              --latest
+          fi
+
+      - name: Verify public release and downloadable asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view v0.1.0-arm64-android8 \
+            --json url,isDraft,isPrerelease,assets \
+            --jq '{url, isDraft, isPrerelease, assets: [.assets[] | {name, size, url}]}'
