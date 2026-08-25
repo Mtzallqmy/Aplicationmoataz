@@ -2,17 +2,21 @@ package ai.alaser.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import ai.alaser.app.ui.i18n.AlaserText as Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import ai.alaser.app.ui.AppUiState
+import ai.alaser.app.ui.i18n.setApplicationLanguage
 
 @Composable
 fun SettingsScreen(
@@ -24,11 +28,23 @@ fun SettingsScreen(
     onOpenMcp: () -> Unit,
     onOpenEnvironments: () -> Unit,
 ) {
+    val context = LocalContext.current
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Language", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TextButton(onClick = { setApplicationLanguage(context, "ar") }) { Text("Arabic") }
+                        TextButton(onClick = { setApplicationLanguage(context, "en") }) { Text("English") }
+                    }
+                }
+            }
+        }
         item {
             SettingsCard(
                 title = "AI Providers",

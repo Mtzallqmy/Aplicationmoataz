@@ -6,6 +6,7 @@ import ai.alaser.ai.providers.ProviderConnectionResult
 import ai.alaser.core.database.AlaserDatabase
 import ai.alaser.core.filesystem.WorkspaceFileEntry
 import ai.alaser.core.filesystem.WorkspaceFileSystem
+import ai.alaser.core.filesystem.WorkspaceCheckpointStore
 import ai.alaser.core.model.AgentMode
 import ai.alaser.core.model.AgentSession
 import ai.alaser.core.model.AgentState
@@ -40,6 +41,7 @@ class AlaserRepository(context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
     private val workspacesDirectory = File(context.filesDir, "workspaces").apply { mkdirs() }
     private val environmentsDirectory = File(context.filesDir, "linux-environments").apply { mkdirs() }
+    private val checkpointsDirectory = File(context.filesDir, "workspace-checkpoints").apply { mkdirs() }
 
     val terminal = ProcessTerminal()
     val rootfsInstaller = RootfsInstaller(environmentsDirectory)
@@ -151,6 +153,12 @@ class AlaserRepository(context: Context) {
     fun filesystem(workspace: Workspace): WorkspaceFileSystem =
         WorkspaceFileSystem(File(workspace.rootPath))
 
+    fun checkpoints(workspace: Workspace): WorkspaceCheckpointStore =
+        WorkspaceCheckpointStore(
+            File(workspace.rootPath),
+            File(checkpointsDirectory, workspace.id).apply { mkdirs() },
+        )
+
     suspend fun files(workspace: Workspace, path: String = "."): List<WorkspaceFileEntry> =
         filesystem(workspace).list(path)
 
@@ -219,18 +227,20 @@ class AlaserRepository(context: Context) {
     fun linuxEnvironments(): List<File> =
         environmentsDirectory.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }.orEmpty()
 
-    fun bundledLinuxDescriptor(): LinuxEnvironmentDescriptor {
+    fun bundledLinuxDescriptor(distribution: String = "ubuntu"): LinuxEnvironmentDescriptor {
+        require(distribution in setOf("ubuntu", "alpine")) { "Unsupported bundled Linux distribution." }
         val manifest = Properties().apply {
             applicationContext.assets.open("linux/manifest.properties").use { load(it) }
         }
-        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull { manifest.containsKey(it + ".filename") }
+        val suffix = if (distribution == "ubuntu") ".ubuntu" else ""
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull { manifest.containsKey(it + suffix + ".filename") }
             ?: error("This device architecture does not have a bundled Linux environment.")
-        val filename = manifest.getProperty(abi + ".filename")
-        val checksum = manifest.getProperty(abi + ".sha256")
-        val version = manifest.getProperty(abi + ".version")
+        val filename = manifest.getProperty(abi + suffix + ".filename")
+        val checksum = manifest.getProperty(abi + suffix + ".sha256")
+        val version = manifest.getProperty(abi + suffix + ".version")
         return LinuxEnvironmentDescriptor(
-            id = "alpine",
-            displayName = "Alpine Linux " + version,
+            id = distribution,
+            displayName = if (distribution == "ubuntu") "Ubuntu " + version + " Developer" else "Alpine Linux " + version,
             architecture = abi,
             archiveUrl = "asset://linux/" + filename,
             sha256 = checksum,
@@ -279,27 +289,39 @@ class AlaserRepository(context: Context) {
         check(environment.deleteRecursively()) { "The Linux environment could not be removed safely." }
     }
 
-    private fun readTelegramBots(): List<TelegramBotConfiguration> =
-        preferences.getString("telegram_bots", null)
+    private fun readTelegramBots(): List<TelegramBotConfiguration> {
+        val stored = database.listTelegramBots()
+        if (stored.isNotEmpty()) return stored
+        val legacy = preferences.getString("telegram_bots", null)
             ?.let { runCatching { json.decodeFromString<List<TelegramBotConfiguration>>(it) }.getOrDefault(emptyList()) }
             .orEmpty()
+        if (legacy.isNotEmpty()) {
+            database.saveTelegramBots(legacy)
+            preferences.edit().remove("telegram_bots").apply()
+        }
+        return legacy
+    }
 
-    private fun readMcpServers(): List<McpServerConfiguration> =
-        preferences.getString("mcp_servers", null)
+    private fun readMcpServers(): List<McpServerConfiguration> {
+        val stored = database.listMcpServers()
+        if (stored.isNotEmpty()) return stored
+        val legacy = preferences.getString("mcp_servers", null)
             ?.let { runCatching { json.decodeFromString<List<McpServerConfiguration>>(it) }.getOrDefault(emptyList()) }
             .orEmpty()
+        if (legacy.isNotEmpty()) {
+            database.saveMcpServers(legacy)
+            preferences.edit().remove("mcp_servers").apply()
+        }
+        return legacy
+    }
 
     private fun persistTelegramBots(value: List<TelegramBotConfiguration>) {
-        check(preferences.edit().putString("telegram_bots", json.encodeToString(value)).commit()) {
-            "Telegram bot settings could not be saved."
-        }
+        database.saveTelegramBots(value)
         telegramBotsValue.value = value
     }
 
     private fun persistMcpServers(value: List<McpServerConfiguration>) {
-        check(preferences.edit().putString("mcp_servers", json.encodeToString(value)).commit()) {
-            "MCP server settings could not be saved."
-        }
+        database.saveMcpServers(value)
         mcpServersValue.value = value
     }
 

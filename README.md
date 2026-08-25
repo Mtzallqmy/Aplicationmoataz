@@ -15,14 +15,18 @@ https://github.com/Mtzallqmy/Aplicationmoataz.
 - Workspace-scoped file access with parent-traversal, sensitive-file,
   escaping-symlink, binary-file, and ZIP-slip protections, real file/folder
   creation, rename/move, copy, editing, deletion confirmation, and ZIP project import.
-- Persistent projects, sessions, messages, and provider metadata in SQLite.
+- Persistent projects, recoverable sessions, messages, providers, Telegram bots,
+  and MCP servers in a migrated transactional SQLite database.
+- Automatic/manual project checkpoints and restorable file snapshots.
+- Arabic and English user interfaces with in-app language selection and RTL support.
 - AES-256-GCM provider-secret encryption with Android Keystore.
 - A real Android NDK/JNI pseudo-terminal with interactive shell I/O, terminal
   resize support, CTRL+C/TAB/ESC controls, and ARM64/x86_64 native builds.
 - A separate process-backed command executor for agent tool calls.
-- Official Alpine Linux 3.24.1 root filesystems and static PRoot 5.4.0-r2
-  executables bundled for ARM64 and x86_64; offline installation needs no
-  external Termux app, root permission, or separate executable.
+- Official Ubuntu 24.04 Developer, Alpine Linux 3.24.1, and static PRoot
+  5.4.0-r2 executables bundled for ARM64 and x86_64. Ubuntu includes Python,
+  pip, Git, Node.js, npm, GCC/G++, Java 17, Go, Rust, Cargo, CMake, SSH,
+  SQLite, ripgrep, and utilities. No external app, root, or tool download is required.
 - Per-workspace Linux environment selection shared by the interactive PTY and
   the coding agent's actual shell/Git tool execution.
 - User-configurable Telegram bots with encrypted tokens, mandatory user
@@ -70,12 +74,10 @@ and uploads the APK as a downloadable workflow artifact.
 5. Approve file writes and shell commands when requested.
 6. Review generated content under Workspace Files.
 
-For a full Linux workspace, open Settings → Linux Environments and choose
-"Install bundled Alpine Linux". Installation is offline because the verified
-rootfs and PRoot executable are included in the APK. The installed environment
-is selected for the active project and immediately powers both Terminal and
-agent shell tools. Install optional language toolchains with Alpine's `apk`
-package manager, for example `apk add python3 git nodejs npm`.
+Ubuntu Developer installs automatically the first time the app opens and is
+selected for new projects. Manage Ubuntu or the smaller Alpine image from
+Settings → Linux Environments. Both rootfs images, PRoot, and Ubuntu's complete
+development toolchains are included inside the APK, so installation is offline.
 
 ## Repository layout
 

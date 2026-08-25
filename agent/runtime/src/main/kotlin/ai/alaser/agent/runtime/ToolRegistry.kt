@@ -18,8 +18,10 @@ class ToolRegistry(
     private val terminal: ProcessTerminal,
     private val commandPrefix: List<String>? = null,
     private val environment: Map<String, String> = emptyMap(),
+    private val beforeMutation: (suspend (String) -> Unit)? = null,
 ) {
     private val riskAnalyzer = CommandRiskAnalyzer()
+    private var checkpointCreated = false
 
     val tools: List<ToolDescriptor> = listOf(
         descriptor("read_file", "Read a UTF-8 text file inside the active workspace.", RiskLevel.SAFE, "path"),
@@ -50,6 +52,10 @@ class ToolRegistry(
     }
 
     suspend fun execute(invocation: ToolInvocation): ToolExecutionResult = try {
+        if (!checkpointCreated && invocation.name in MUTATING_TOOLS) {
+            beforeMutation?.invoke("Before " + invocation.name)
+            checkpointCreated = true
+        }
         when (invocation.name) {
             "read_file" -> result(invocation, filesystem.readText(requireArgument(invocation.arguments, "path")))
             "write_file" -> {
@@ -135,6 +141,9 @@ class ToolRegistry(
 
     companion object {
         private const val MAX_OUTPUT_CHARS = 100_000
+        private val MUTATING_TOOLS = setOf(
+            "write_file", "replace_text", "move_file", "copy_file", "create_directory", "delete_file", "shell_exec",
+        )
 
         private fun descriptor(
             name: String,

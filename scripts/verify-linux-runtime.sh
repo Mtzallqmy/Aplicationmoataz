@@ -22,3 +22,28 @@ echo "$output"
 [[ "$output" == ALASER_LINUX_OK* ]]
 [[ "$(cat "$alaser_staging/workspace/proot-check.txt")" == "verified" ]]
 echo "The bundled static PRoot starts Alpine Linux and writes to its bound workspace."
+
+mkdir -p "$alaser_staging/ubuntu"
+tar -xzf "$alaser_root/app/src/main/assets/linux/ubuntu-amd64.rootfs" -C "$alaser_staging/ubuntu"
+PROOT_TMP_DIR="$alaser_staging/tmp" \
+    "$alaser_root/app/src/main/jniLibs/x86_64/libproot_exec.so" \
+        --rootfs="$alaser_staging/ubuntu" \
+        --bind="$alaser_staging/workspace:/workspace" \
+        --bind=/dev \
+        --bind=/proc \
+        --cwd=/workspace \
+        --link2symlink \
+        /bin/sh -c '
+            python3 --version
+            git --version
+            node --version
+            npm --version
+            gcc --version | head -n 1
+            go version
+            rustc --version
+            cargo --version
+            java -version
+            printf "ubuntu-developer-ready" > /workspace/ubuntu-check.txt
+        '
+[[ "$(cat "$alaser_staging/workspace/ubuntu-check.txt")" == "ubuntu-developer-ready" ]]
+echo "The bundled Ubuntu developer environment starts with all required preinstalled toolchains."

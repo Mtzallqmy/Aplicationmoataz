@@ -42,7 +42,7 @@ class AgentForegroundService : Service() {
     private fun notification(label: String): Notification {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Agent and Telegram tasks", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, getString(R.string.agent_notification_channel), NotificationManager.IMPORTANCE_LOW),
         )
         val openApp = PendingIntent.getActivity(
             this,
@@ -52,7 +52,7 @@ class AgentForegroundService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_alaser_logo)
-            .setContentTitle("Alaser AI is working")
+            .setContentTitle(getString(R.string.agent_notification_title))
             .setContentText(label.take(120))
             .setContentIntent(openApp)
             .setOngoing(true)

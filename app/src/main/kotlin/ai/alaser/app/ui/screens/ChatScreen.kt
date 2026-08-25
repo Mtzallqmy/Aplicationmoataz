@@ -25,7 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import ai.alaser.app.ui.i18n.AlaserText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import ai.alaser.app.ui.AppUiState
 import ai.alaser.app.ui.theme.AlaserCodeTextStyle
 import ai.alaser.core.model.AgentMode
+import ai.alaser.core.model.AgentSession
 import ai.alaser.core.model.AgentState
 import ai.alaser.core.model.ApprovalDecision
 import ai.alaser.core.model.ChatMessage
@@ -54,6 +55,8 @@ fun ChatScreen(
     onOpenProviders: () -> Unit,
     onOpenProjects: () -> Unit,
     onOpenFiles: () -> Unit,
+    onNewSession: () -> Unit,
+    onSelectSession: (AgentSession) -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
     var selectedMode by remember { mutableStateOf(AgentMode.BUILD) }
@@ -89,6 +92,34 @@ fun ChatScreen(
                     val label = mode.name.lowercase().replace('_', ' ')
                     Text(if (selectedMode == mode) "• " + label else label)
                 }
+            }
+        }
+
+        if (state.sessions.isNotEmpty()) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                item("new-session") {
+                    TextButton(onClick = onNewSession, enabled = !active) { Text("New session") }
+                }
+                items(state.sessions, key = { it.id }) { session ->
+                    TextButton(onClick = { onSelectSession(session) }, enabled = !active) {
+                        val selected = if (session.id == state.activeSession?.id) "• " else ""
+                        Text(selected + session.title.take(22))
+                    }
+                }
+            }
+        }
+
+        state.environmentStatus?.let { status ->
+            if ("ubuntu" !in state.installedEnvironments) {
+                Text(
+                    status,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
 

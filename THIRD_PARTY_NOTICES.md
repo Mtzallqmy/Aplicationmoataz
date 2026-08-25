@@ -30,3 +30,11 @@ The APK also bundles unmodified Alpine Linux 3.24.1 minirootfs archives for
 arm64 and x86_64. Each contained package retains its own upstream license.
 Official image downloads and published SHA-256 checksums are available at
 https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/.
+
+The APK additionally bundles Ubuntu 24.04 LTS developer root filesystems built
+from Canonical's official `ubuntu:24.04` OCI image for arm64 and amd64.
+Python, Git, Node.js, npm, OpenJDK, Go, Rust, GCC, and other tools are installed
+from official Ubuntu package repositories without source modifications. Every
+package retains its individual license and copyright files under
+`/usr/share/doc/*/copyright`; source packages are available from Ubuntu's
+official repositories and https://launchpad.net/ubuntu.

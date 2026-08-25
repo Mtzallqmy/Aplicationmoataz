@@ -19,17 +19,19 @@ special-key handling, shell tabs, and terminal emulation are not complete.
 
 ## Linux sandbox
 
-Release preparation bundles official Alpine Linux 3.24.1 root filesystems and
+Release preparation bundles Ubuntu 24.04 Developer, Alpine Linux 3.24.1, and
 unmodified statically linked PRoot 5.4.0-r2 executables for ARM64 and x86_64.
-Users can install Alpine offline; both the real PTY and agent shell tools use
-the Linux environment selected for their workspace. GitHub Actions exercises
-the actual x86_64 PRoot binary and rootfs together. Android-device behavior
+Ubuntu contains preinstalled Python/pip, Git, Node.js/npm, Java 17, Go, Rust,
+Cargo, GCC/G++, Make, CMake, SSH, SQLite, ripgrep, and related developer tools.
+The application begins installing Ubuntu automatically and selects it for new
+projects. Both the real PTY and agent shell tools use the selected environment.
+GitHub Actions verifies both actual x86_64 PRoot environments, all major Ubuntu
+toolchains, and the application's rootfs installer. Android-device behavior
 cannot be verified without a physical device or emulator.
 
-Alpine includes its `apk` package manager; Node.js, Python, Git, and Rust are
-not preinstalled and must be installed in the selected environment when needed.
-Debian and Ubuntu can be imported as SHA-256-verified user-supplied ZIP or
-tar.gz archives, but are not bundled. tar.xz and OCI layers are unsupported.
+Debian can be imported as a verified ZIP or tar.gz image; tar.xz and OCI layer
+imports are unsupported. Android SDK, Flutter SDK, and local AI model weights
+are not bundled and can be installed later within Ubuntu.
 
 ## Integrations
 
@@ -47,10 +49,13 @@ The editor is a real editable text field but has no syntax highlighting, line
 numbers, undo history, diff UI, or language-server integration. ZIP project
 import uses Android's Storage Access Framework; Git status, diff, history,
 branches, initialization, staging, commits, pull, and explicitly confirmed
-push are available when Git is installed. Importing arbitrary directory trees,
-repository clone, checkpoints, context compaction,
+push are available. Manual and automatic project checkpoints can be restored.
+Sessions and messages are restored after restart; interrupted jobs are marked
+honestly. Importing arbitrary directory trees, repository clone, context compaction,
 local models, notifications, crash recovery, optional cloud adapters, cloud
-deployment, and full Arabic UI translation are not implemented.
+deployment, and language-server integration are not implemented. Core screens
+support Arabic and English; provider errors and developer command output remain
+in their original language.
 
 Rust primitives are standalone and are not integrated through JNI or UniFFI.
 

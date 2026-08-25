@@ -8,6 +8,7 @@ on:
 jobs:
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -19,6 +20,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+      - name: Compile app and verify core modules before preparing Ubuntu
+        run: gradle :app:compileDebugKotlin :core:filesystem:test :core:terminal:test
+      - name: Enable ARM64 Ubuntu image preparation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
       - name: Prepare verified offline Linux runtime
         run: bash scripts/prepare-linux-runtime.sh
       - name: Verify bundled PRoot launches the real Linux rootfs
@@ -30,6 +37,7 @@ jobs:
       - name: Run JVM and Android unit tests
         env:
           ALASER_BUNDLED_ROOTFS: ${{ github.workspace }}/app/src/main/assets/linux/alpine-x86_64.rootfs
+          ALASER_BUNDLED_UBUNTU: ${{ github.workspace }}/app/src/main/assets/linux/ubuntu-amd64.rootfs
         run: gradle test
       - name: Run Android lint
         run: gradle :app:lintDebug
@@ -39,3 +47,4 @@ jobs:
           name: alaser-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          compression-level: 0

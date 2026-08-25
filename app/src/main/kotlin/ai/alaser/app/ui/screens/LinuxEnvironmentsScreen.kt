@@ -11,7 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import ai.alaser.app.ui.i18n.AlaserText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,7 +26,7 @@ import ai.alaser.app.ui.AppUiState
 fun LinuxEnvironmentsScreen(
     state: AppUiState,
     onInstall: (String, String, String) -> Unit,
-    onInstallBundled: () -> Unit,
+    onInstallBundled: (String) -> Unit,
     onSelect: (String?) -> Unit,
     onDelete: (String) -> Unit,
 ) {
@@ -41,14 +41,20 @@ fun LinuxEnvironmentsScreen(
     ) {
         item {
             Text(
-                "Alpine Linux and the PRoot execution engine are included in this app. " +
-                    "Install the bundled environment without downloading anything, or add a verified custom rootfs.",
+                "Ubuntu 24.04 Developer, Alpine Linux, PRoot, Python, Git, Node.js, npm, Java, Go, " +
+                    "Rust, Cargo, GCC, and development tools are included directly in this app.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
         item {
             Button(
-                onClick = onInstallBundled,
+                onClick = { onInstallBundled("ubuntu") },
+                enabled = "ubuntu" !in state.installedEnvironments,
+            ) { Text(if ("ubuntu" in state.installedEnvironments) "Ubuntu Developer installed" else "Install Ubuntu with all development tools") }
+        }
+        item {
+            Button(
+                onClick = { onInstallBundled("alpine") },
                 enabled = "alpine" !in state.installedEnvironments,
             ) { Text(if ("alpine" in state.installedEnvironments) "Alpine Linux installed" else "Install bundled Alpine Linux") }
         }

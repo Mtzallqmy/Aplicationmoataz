@@ -14,6 +14,7 @@ import ai.alaser.app.AlaserApplication
 import ai.alaser.app.service.AgentForegroundService
 import ai.alaser.app.terminal.NativePtySession
 import ai.alaser.core.filesystem.WorkspaceFileEntry
+import ai.alaser.core.filesystem.WorkspaceCheckpoint
 import ai.alaser.core.model.AgentMode
 import ai.alaser.core.model.AgentSession
 import ai.alaser.core.model.AgentState
@@ -55,6 +56,7 @@ data class AppUiState(
     val activeWorkspace: Workspace? = null,
     val activeProvider: ProviderConfiguration? = null,
     val activeSession: AgentSession? = null,
+    val sessions: List<AgentSession> = emptyList(),
     val messages: List<ChatMessage> = emptyList(),
     val files: List<WorkspaceFileEntry> = emptyList(),
     val currentDirectory: String = ".",
@@ -62,6 +64,7 @@ data class AppUiState(
     val editorContent: String = "",
     val terminalOutput: String = "",
     val gitOutput: String = "",
+    val checkpoints: List<WorkspaceCheckpoint> = emptyList(),
     val terminalInteractive: Boolean = false,
     val agentState: AgentState = AgentState.IDLE,
     val agentSummary: String = "",
@@ -96,6 +99,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 loadFiles()
+                stateValue.value.activeWorkspace?.let { restoreWorkspaceSessions(it) }
             }
         }
         viewModelScope.launch {
@@ -121,10 +125,16 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         refreshEnvironments()
+        if (repository.linuxEnvironments().none { it.name == "ubuntu" }) {
+            installBundledLinux("ubuntu")
+        }
     }
 
     fun createWorkspace(name: String) = safely {
         val workspace = repository.createWorkspace(name)
+        if (repository.linuxEnvironments().any { it.name == "ubuntu" }) {
+            repository.selectEnvironment(workspace, "ubuntu")
+        }
         stateValue.update {
             it.copy(
                 activeWorkspace = workspace,
@@ -133,6 +143,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         loadFiles()
+        refreshCheckpoints()
     }
 
     fun importWorkspace(uri: android.net.Uri) = safely {
@@ -158,12 +169,51 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                 activeWorkspace = workspace,
                 activeEnvironment = repository.selectedEnvironment(workspace),
                 activeSession = null,
+                sessions = emptyList(),
                 messages = emptyList(),
                 currentDirectory = ".",
                 editorPath = null,
             )
         }
         loadFiles()
+        restoreWorkspaceSessions(workspace)
+        refreshCheckpoints()
+    }
+
+    fun startNewSession() {
+        if (agentJob?.isActive == true) return
+        stateValue.update { it.copy(activeSession = null, messages = emptyList(), agentState = AgentState.IDLE) }
+    }
+
+    fun selectSession(session: AgentSession) = safely {
+        if (agentJob?.isActive == true) return@safely
+        val messages = repository.messages(session.id)
+        stateValue.update { it.copy(activeSession = session, messages = messages, agentState = session.state) }
+    }
+
+    private fun restoreWorkspaceSessions(workspace: Workspace) = safely {
+        val sessions = repository.sessions(workspace.id)
+        val previous = sessions.firstOrNull()
+        val terminalStates = setOf(AgentState.IDLE, AgentState.COMPLETED, AgentState.CANCELLED, AgentState.FAILED)
+        val interrupted = previous != null && previous.state !in terminalStates
+        val restored = if (interrupted) {
+            previous!!.copy(state = AgentState.FAILED, updatedAt = System.currentTimeMillis())
+                .also { repository.saveSession(it) }
+        } else previous
+        val history = restored?.let { repository.messages(it.id) }.orEmpty()
+        val refreshedSessions = repository.sessions(workspace.id)
+        stateValue.update { state ->
+            if (state.activeWorkspace?.id != workspace.id) state
+            else state.copy(
+                sessions = refreshedSessions,
+                activeSession = restored,
+                messages = history,
+                agentState = restored?.state ?: AgentState.IDLE,
+                agentSummary = if (interrupted) {
+                    "Previous task was interrupted. Review the conversation and continue with a new request."
+                } else state.agentSummary,
+            )
+        }
     }
 
     fun saveProvider(name: String, baseUrl: String, model: String, apiKey: String) = safely {
@@ -297,8 +347,8 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         repository.rootfsInstaller.install(descriptor).collect(::handleEnvironmentInstallEvent)
     }
 
-    fun installBundledLinux() = safely {
-        val descriptor = repository.bundledLinuxDescriptor()
+    fun installBundledLinux(distribution: String = "ubuntu") = safely {
+        val descriptor = repository.bundledLinuxDescriptor(distribution)
         repository.rootfsInstaller.installBundled(descriptor) {
             repository.bundledLinuxArchive(descriptor)
         }.collect(::handleEnvironmentInstallEvent)
@@ -381,6 +431,8 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                     title = text,
                     mode = mode,
                 )
+                val workspaceSessions = repository.sessions(workspace.id)
+                stateValue.update { it.copy(sessions = workspaceSessions) }
                 val userMessage = ChatMessage(
                     id = UUID.randomUUID().toString(),
                     sessionId = session.id,
@@ -406,6 +458,11 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                         repository.terminal,
                         repository.sandboxCommand(workspace),
                         mapOf("PROOT_TMP_DIR" to repository.sandboxTemporaryDirectory().absolutePath),
+                        beforeMutation = { description ->
+                            repository.checkpoints(workspace).create(description)
+                            val saved = repository.checkpoints(workspace).list()
+                            stateValue.update { it.copy(checkpoints = saved) }
+                        },
                     ),
                     approvals = ApprovalEngine(
                         ApprovalHandler { approval ->
@@ -606,6 +663,27 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
+
+    fun createCheckpoint() = safely {
+        val workspace = stateValue.value.activeWorkspace ?: error("Select a project first.")
+        repository.checkpoints(workspace).create("Manual checkpoint")
+        val saved = repository.checkpoints(workspace).list()
+        stateValue.update { it.copy(checkpoints = saved) }
+    }
+
+    fun restoreCheckpoint(identifier: String) = safely {
+        val workspace = stateValue.value.activeWorkspace ?: error("Select a project first.")
+        repository.checkpoints(workspace).restore(identifier)
+        val saved = repository.checkpoints(workspace).list()
+        stateValue.update { it.copy(checkpoints = saved, gitOutput = "Restored checkpoint " + identifier) }
+        loadFiles()
+    }
+
+    private fun refreshCheckpoints() = safely {
+        val workspace = stateValue.value.activeWorkspace ?: return@safely
+        val saved = repository.checkpoints(workspace).list()
+        stateValue.update { it.copy(checkpoints = saved) }
+    }
 
     fun startInteractiveTerminal() = safely {
         val workspace = stateValue.value.activeWorkspace ?: return@safely

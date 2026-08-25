@@ -12,7 +12,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import ai.alaser.app.ui.i18n.AlaserText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,9 +25,15 @@ import ai.alaser.app.ui.AppUiState
 import ai.alaser.app.ui.theme.AlaserCodeTextStyle
 
 @Composable
-fun GitScreen(state: AppUiState, onAction: (String, String) -> Unit) {
+fun GitScreen(
+    state: AppUiState,
+    onAction: (String, String) -> Unit,
+    onCreateCheckpoint: () -> Unit,
+    onRestoreCheckpoint: (String) -> Unit,
+) {
     var message by remember { mutableStateOf("") }
     var confirmPush by remember { mutableStateOf(false) }
+    var restoreIdentifier by remember { mutableStateOf<String?>(null) }
     if (confirmPush) {
         AlertDialog(
             onDismissRequest = { confirmPush = false },
@@ -37,6 +43,19 @@ fun GitScreen(state: AppUiState, onAction: (String, String) -> Unit) {
                 TextButton(onClick = { onAction("push", ""); confirmPush = false }) { Text("Push") }
             },
             dismissButton = { TextButton(onClick = { confirmPush = false }) { Text("Cancel") } },
+        )
+    }
+    restoreIdentifier?.let { identifier ->
+        AlertDialog(
+            onDismissRequest = { restoreIdentifier = null },
+            title = { Text("Restore project checkpoint?") },
+            text = { Text("Files will be restored to the selected saved state.") },
+            confirmButton = {
+                TextButton(onClick = { onRestoreCheckpoint(identifier); restoreIdentifier = null }) {
+                    Text("Restore")
+                }
+            },
+            dismissButton = { TextButton(onClick = { restoreIdentifier = null }) { Text("Cancel") } },
         )
     }
     Column(
@@ -70,6 +89,16 @@ fun GitScreen(state: AppUiState, onAction: (String, String) -> Unit) {
             onClick = { onAction("commit", message); message = "" },
             enabled = message.isNotBlank() && state.activeWorkspace != null,
         ) { Text("Create commit") }
+        Text("Project checkpoints", style = MaterialTheme.typography.titleMedium)
+        Button(onClick = onCreateCheckpoint, enabled = state.activeWorkspace != null) {
+            Text("Create checkpoint")
+        }
+        state.checkpoints.forEach { checkpoint ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(checkpoint.label + " · " + checkpoint.fileCount + " files", modifier = Modifier.weight(1f))
+                TextButton(onClick = { restoreIdentifier = checkpoint.id }) { Text("Restore") }
+            }
+        }
         if (state.gitOutput.isNotBlank()) {
             Text(state.gitOutput, style = AlaserCodeTextStyle, modifier = Modifier.fillMaxWidth())
         }

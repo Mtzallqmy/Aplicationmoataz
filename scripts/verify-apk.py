@@ -34,6 +34,12 @@ def main() -> int:
                 raise ValueError(f"Bundled Linux rootfs checksum mismatch for {abi}")
             print(f"{abi}: native PTY, static PRoot, and verified Alpine rootfs ({len(archive):,} bytes)")
 
+            ubuntu = package.read("assets/linux/" + manifest[f"{abi}.ubuntu.filename"])
+            ubuntu_checksum = hashlib.sha256(ubuntu).hexdigest()
+            if ubuntu_checksum != manifest[f"{abi}.ubuntu.sha256"]:
+                raise ValueError(f"Bundled Ubuntu developer rootfs checksum mismatch for {abi}")
+            print(f"{abi}: verified Ubuntu developer rootfs with complete toolchains ({len(ubuntu):,} bytes)")
+
     print("APK offline Linux runtime verification passed.")
     return 0
 

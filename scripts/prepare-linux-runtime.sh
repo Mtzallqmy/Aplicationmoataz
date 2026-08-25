@@ -4,6 +4,7 @@ set -euo pipefail
 alaser_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 alaser_version="3.24.1"
 alaser_proot_version="5.4.0-r2"
+alaser_ubuntu_version="24.04"
 alaser_assets="$alaser_root/app/src/main/assets/linux"
 alaser_staging="$(mktemp -d)"
 trap 'rm -rf "$alaser_staging"' EXIT
@@ -41,7 +42,56 @@ prepare_architecture() {
     printf '%s.version=%s\n' "$android_abi" "$alaser_version" >> "$alaser_assets/manifest.properties"
 }
 
+prepare_ubuntu_developer_image() {
+    local docker_arch="$1"
+    local android_abi="$2"
+    local archive="$alaser_assets/ubuntu-$docker_arch.rootfs"
+    local container="alaser-ubuntu-${docker_arch}-$$"
+    local packages=(
+        bash ca-certificates curl wget git openssh-client zip unzip xz-utils
+        python3 python3-pip python3-venv
+        nodejs npm
+        build-essential cmake pkg-config
+        golang-go rustc cargo openjdk-17-jdk-headless
+        ripgrep jq sqlite3 nano less
+    )
+
+    echo "Building Ubuntu $alaser_ubuntu_version development workspace for $android_abi"
+    docker run \
+        --platform "linux/$docker_arch" \
+        --name "$container" \
+        --env DEBIAN_FRONTEND=noninteractive \
+        "ubuntu:$alaser_ubuntu_version" \
+        bash -euxc '
+            apt-get update
+            apt-get install -y --no-install-recommends "$@"
+            apt-get clean
+            rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*
+            python3 --version
+            git --version
+            node --version
+            npm --version
+            gcc --version | head -n 1
+            go version
+            rustc --version
+            cargo --version
+            java -version
+        ' bash "${packages[@]}"
+
+    docker export "$container" | gzip -1 > "$archive"
+    docker rm "$container" >/dev/null
+    local checksum
+    checksum="$(sha256sum "$archive" | awk '{print $1}')"
+    printf '%s.ubuntu.filename=ubuntu-%s.rootfs\n' "$android_abi" "$docker_arch" >> "$alaser_assets/manifest.properties"
+    printf '%s.ubuntu.sha256=%s\n' "$android_abi" "$checksum" >> "$alaser_assets/manifest.properties"
+    printf '%s.ubuntu.version=%s\n' "$android_abi" "$alaser_ubuntu_version" >> "$alaser_assets/manifest.properties"
+    printf '%s.ubuntu.tools=%s\n' "$android_abi" "${packages[*]}" >> "$alaser_assets/manifest.properties"
+    echo "Prepared Ubuntu developer rootfs ($(du -h "$archive" | awk '{print $1}')) for $android_abi"
+}
+
 prepare_architecture aarch64 arm64-v8a
 prepare_architecture x86_64 x86_64
+prepare_ubuntu_developer_image arm64 arm64-v8a
+prepare_ubuntu_developer_image amd64 x86_64
 
-echo "Prepared offline Linux environments and bundled PRoot executables."
+echo "Prepared full offline Ubuntu and Alpine Linux environments with bundled PRoot executables."

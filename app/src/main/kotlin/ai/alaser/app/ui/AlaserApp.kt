@@ -15,7 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import ai.alaser.app.ui.i18n.AlaserText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -135,6 +135,8 @@ private fun AlaserNavigation(
                 onOpenProviders = { controller.navigate("providers") },
                 onOpenProjects = { controller.navigate("projects") },
                 onOpenFiles = { controller.navigate("files") },
+                onNewSession = viewModel::startNewSession,
+                onSelectSession = viewModel::selectSession,
             )
         }
         composable("projects") {
@@ -193,7 +195,12 @@ private fun AlaserNavigation(
             )
         }
         composable("git") {
-            GitScreen(state = state, onAction = viewModel::runGitAction)
+            GitScreen(
+                state = state,
+                onAction = viewModel::runGitAction,
+                onCreateCheckpoint = viewModel::createCheckpoint,
+                onRestoreCheckpoint = viewModel::restoreCheckpoint,
+            )
         }
         composable("telegram") {
             TelegramScreen(

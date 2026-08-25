@@ -61,6 +61,26 @@ class RootfsInstallerTest {
         assertTrue("The package manager must exist.", File(installed.directory, "sbin/apk").exists())
     }
 
+    @Test
+    fun installsBundledUbuntuDeveloperEnvironmentWhenAvailable() = runBlocking {
+        val archive = System.getenv("ALASER_BUNDLED_UBUNTU")?.let(::File) ?: return@runBlocking
+        val descriptor = LinuxEnvironmentDescriptor(
+            id = "ubuntu",
+            displayName = "Ubuntu Developer",
+            architecture = "x86_64",
+            archiveUrl = "asset://linux/ubuntu-amd64.rootfs",
+            sha256 = RootfsInstaller.checksum(archive),
+        )
+        val installed = RootfsInstaller(temporary.newFolder("ubuntu-environments"))
+            .installBundled(descriptor) { archive.inputStream() }
+            .toList()
+            .last() as EnvironmentInstallEvent.Installed
+
+        for (tool in listOf("bin/sh", "usr/bin/python3", "usr/bin/git", "usr/bin/node", "usr/bin/npm", "usr/bin/gcc", "usr/bin/rustc", "usr/bin/cargo")) {
+            assertTrue("The developer tool is missing: " + tool, File(installed.directory, tool).exists())
+        }
+    }
+
     private fun rootfsArchive(): ByteArray {
         val output = ByteArrayOutputStream()
         TarArchiveOutputStream(GZIPOutputStream(output)).use { tar ->

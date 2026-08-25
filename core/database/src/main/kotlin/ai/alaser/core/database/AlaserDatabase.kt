@@ -11,6 +11,8 @@ import ai.alaser.core.model.ChatMessage
 import ai.alaser.core.model.MessagePart
 import ai.alaser.core.model.MessageRole
 import ai.alaser.core.model.ProviderConfiguration
+import ai.alaser.core.model.TelegramBotConfiguration
+import ai.alaser.core.model.McpServerConfiguration
 import ai.alaser.core.model.Workspace
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -43,10 +45,31 @@ class AlaserDatabase(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         )
         database.execSQL("CREATE INDEX idx_sessions_workspace ON sessions(workspace_id, updated_at DESC)")
         database.execSQL("CREATE INDEX idx_messages_session ON messages(session_id, created_at)")
+        createIntegrationTables(database)
     }
 
     override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        error("No migration path exists from schema version " + oldVersion + " to " + newVersion + ".")
+        var current = oldVersion
+        if (current == 1 && newVersion >= 2) {
+            createIntegrationTables(database)
+            current = 2
+        }
+        check(current == newVersion) {
+            "No migration path exists from schema version " + oldVersion + " to " + newVersion + "."
+        }
+    }
+
+    private fun createIntegrationTables(database: SQLiteDatabase) {
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS telegram_bots (id TEXT PRIMARY KEY, name TEXT NOT NULL, " +
+                "token_secret_id TEXT NOT NULL, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, " +
+                "allowed_user_ids TEXT NOT NULL, allowed_chat_ids TEXT NOT NULL, enabled INTEGER NOT NULL)",
+        )
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS mcp_servers (id TEXT PRIMARY KEY, name TEXT NOT NULL, " +
+                "endpoint TEXT NOT NULL, enabled INTEGER NOT NULL, trusted INTEGER NOT NULL)",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS idx_telegram_workspace ON telegram_bots(workspace_id)")
     }
 
     fun saveWorkspace(workspace: Workspace) {
@@ -181,8 +204,84 @@ class AlaserDatabase(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         }
     }
 
+    fun saveTelegramBots(bots: List<TelegramBotConfiguration>) {
+        val database = writableDatabase
+        database.beginTransaction()
+        try {
+            database.delete("telegram_bots", null, null)
+            bots.forEach { bot ->
+                database.insertOrThrow("telegram_bots", null, ContentValues().apply {
+                    put("id", bot.id)
+                    put("name", bot.name)
+                    put("token_secret_id", bot.tokenSecretId)
+                    put("workspace_id", bot.workspaceId)
+                    put("allowed_user_ids", json.encodeToString(bot.allowedUserIds))
+                    put("allowed_chat_ids", json.encodeToString(bot.allowedChatIds))
+                    put("enabled", if (bot.enabled) 1 else 0)
+                })
+            }
+            database.setTransactionSuccessful()
+        } finally {
+            database.endTransaction()
+        }
+    }
+
+    fun listTelegramBots(): List<TelegramBotConfiguration> = readableDatabase.query(
+        "telegram_bots", null, null, null, null, null, "name COLLATE NOCASE",
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) {
+                add(TelegramBotConfiguration(
+                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                    tokenSecretId = cursor.getString(cursor.getColumnIndexOrThrow("token_secret_id")),
+                    workspaceId = cursor.getString(cursor.getColumnIndexOrThrow("workspace_id")),
+                    allowedUserIds = json.decodeFromString<Set<Long>>(cursor.getString(cursor.getColumnIndexOrThrow("allowed_user_ids"))),
+                    allowedChatIds = json.decodeFromString<Set<Long>>(cursor.getString(cursor.getColumnIndexOrThrow("allowed_chat_ids"))),
+                    enabled = cursor.getInt(cursor.getColumnIndexOrThrow("enabled")) != 0,
+                ))
+            }
+        }
+    }
+
+    fun saveMcpServers(servers: List<McpServerConfiguration>) {
+        val database = writableDatabase
+        database.beginTransaction()
+        try {
+            database.delete("mcp_servers", null, null)
+            servers.forEach { server ->
+                database.insertOrThrow("mcp_servers", null, ContentValues().apply {
+                    put("id", server.id)
+                    put("name", server.name)
+                    put("endpoint", server.endpoint)
+                    put("enabled", if (server.enabled) 1 else 0)
+                    put("trusted", if (server.trusted) 1 else 0)
+                })
+            }
+            database.setTransactionSuccessful()
+        } finally {
+            database.endTransaction()
+        }
+    }
+
+    fun listMcpServers(): List<McpServerConfiguration> = readableDatabase.query(
+        "mcp_servers", null, null, null, null, null, "name COLLATE NOCASE",
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) {
+                add(McpServerConfiguration(
+                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                    endpoint = cursor.getString(cursor.getColumnIndexOrThrow("endpoint")),
+                    enabled = cursor.getInt(cursor.getColumnIndexOrThrow("enabled")) != 0,
+                    trusted = cursor.getInt(cursor.getColumnIndexOrThrow("trusted")) != 0,
+                ))
+            }
+        }
+    }
+
     companion object {
         const val DATABASE_NAME = "alaser.db"
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 }
