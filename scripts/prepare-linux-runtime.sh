@@ -63,8 +63,25 @@ prepare_ubuntu_developer_image() {
         --env DEBIAN_FRONTEND=noninteractive \
         "ubuntu:$alaser_ubuntu_version" \
         bash -euxc '
-            apt-get update
-            apt-get install -y --no-install-recommends "$@"
+            installed=0
+            for attempt in 1 2 3 4; do
+                # Ubuntu mirror publishing can briefly make package indexes
+                # reference an archive that has just been replaced.
+                rm -rf /var/lib/apt/lists/*
+                apt-get update \
+                    -o Acquire::Retries=5 \
+                    -o Acquire::http::No-Cache=true \
+                    -o Acquire::http::Pipeline-Depth=0
+                if apt-get install \
+                    -o Acquire::Retries=5 \
+                    -o Acquire::http::No-Cache=true \
+                    -y --no-install-recommends "$@"; then
+                    installed=1
+                    break
+                fi
+                echo "Ubuntu archive changed while installing; refreshing indexes ($attempt/4)." >&2
+            done
+            test "$installed" -eq 1
             apt-get clean
             rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*
             python3 --version
