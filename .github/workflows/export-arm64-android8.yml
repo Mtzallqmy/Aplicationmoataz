@@ -1,0 +1,145 @@
+name: Export ARM64 Android 8 APK
+
+on:
+  push:
+    paths:
+      - .github/workflows/export-arm64-android8.yml
+
+jobs:
+  arm64:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download fully verified offline Linux APK
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 32885879932
+          name: alaser-debug-apk
+
+      - name: Remove emulator architecture and its Linux root filesystems
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import shutil
+          import zipfile
+
+          omitted = {
+              "assets/linux/alpine-x86_64.rootfs",
+              "assets/linux/ubuntu-amd64.rootfs",
+          }
+          with zipfile.ZipFile("app-debug.apk") as original:
+              with zipfile.ZipFile("arm64-unsigned.apk", "w", allowZip64=True) as target:
+                  for entry in original.infolist():
+                      name = entry.filename
+                      if name.startswith("lib/x86_64/") or name in omitted:
+                          print("Removing", name, entry.file_size)
+                          continue
+                      if name.startswith("META-INF/") and name.endswith((".SF", ".RSA", ".DSA", ".EC")):
+                          continue
+                      if name == "assets/linux/manifest.properties":
+                          lines = original.read(entry).decode().splitlines()
+                          content = "\n".join(line for line in lines if not line.startswith("x86_64.")) + "\n"
+                          target.writestr(entry, content.encode())
+                          continue
+                      with original.open(entry) as source, target.open(entry, "w") as output:
+                          shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
+          PY
+
+      - name: Align and sign installable Android 8+ ARM64 APK
+        shell: bash
+        run: |
+          sdk_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$sdk_tools/zipalign" -f -p 4 arm64-unsigned.apk arm64-aligned.apk
+          keytool -genkeypair \
+            -keystore alaser-debug.keystore \
+            -storepass android -keypass android \
+            -alias androiddebugkey \
+            -dname 'CN=Android Debug,O=Android,C=US' \
+            -keyalg RSA -keysize 2048 -validity 10000
+          "$sdk_tools/apksigner" sign \
+            --ks alaser-debug.keystore \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --min-sdk-version 26 \
+            --out Alaser-AI-ARM64-Android8.apk \
+            arm64-aligned.apk
+          "$sdk_tools/apksigner" verify --verbose --print-certs Alaser-AI-ARM64-Android8.apk
+          "$sdk_tools/aapt" dump badging Alaser-AI-ARM64-Android8.apk | grep -E "^sdkVersion:|^targetSdkVersion:|^native-code:"
+          "$sdk_tools/aapt" dump badging Alaser-AI-ARM64-Android8.apk | grep -F "sdkVersion:'26'"
+
+      - name: Verify ARM64 runtimes, embedded Ubuntu, notices and absence of x86
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import struct
+          import zipfile
+
+          path = "Alaser-AI-ARM64-Android8.apk"
+          with zipfile.ZipFile(path) as apk:
+              names = apk.namelist()
+              assert not any(name.startswith("lib/x86_64/") for name in names)
+              assert "assets/linux/ubuntu-amd64.rootfs" not in names
+              assert "assets/linux/alpine-x86_64.rootfs" not in names
+              manifest = dict(
+                  line.split("=", 1)
+                  for line in apk.read("assets/linux/manifest.properties").decode().splitlines()
+                  if "=" in line
+              )
+              assert all(not key.startswith("x86_64.") for key in manifest)
+              for library in ("libalaser_pty.so", "libproot_exec.so"):
+                  data = apk.read("lib/arm64-v8a/" + library)
+                  assert data[:4] == b"\x7fELF"
+                  assert struct.unpack_from("<H", data, 18)[0] == 183
+              for suffix in ("", ".ubuntu"):
+                  name = "assets/linux/" + manifest["arm64-v8a" + suffix + ".filename"]
+                  digest = hashlib.sha256()
+                  with apk.open(name) as stream:
+                      while chunk := stream.read(8 * 1024 * 1024):
+                          digest.update(chunk)
+                  assert digest.hexdigest() == manifest["arm64-v8a" + suffix + ".sha256"]
+                  print(name, apk.getinfo(name).file_size, digest.hexdigest())
+              for notice in ("AGORA-MIT.txt", "LOCIANT-MIT.txt"):
+                  assert "MIT License" in apk.read("assets/licenses/" + notice).decode()
+          print("Android 8+, ARM64, Ubuntu, Alpine, PRoot, PTY, and MIT notices verified")
+          PY
+
+      - name: Create download ZIP and checksum
+        shell: bash
+        run: |
+          zip -0 Alaser-AI-ARM64-Android8.zip Alaser-AI-ARM64-Android8.apk
+          sha256sum Alaser-AI-ARM64-Android8.apk Alaser-AI-ARM64-Android8.zip | tee SHA256SUMS
+          mkdir -p transfer
+          split -b 450m -d -a 2 Alaser-AI-ARM64-Android8.zip transfer/alaser-arm64-zip.part-
+          ls -lh Alaser-AI-ARM64-Android8.apk Alaser-AI-ARM64-Android8.zip transfer
+
+      - name: Upload complete ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Alaser-AI-ARM64-Android8-ZIP
+          path: Alaser-AI-ARM64-Android8.zip
+          compression-level: 0
+
+      - name: Upload ZIP transfer part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: alaser-arm64-zip-part-00
+          path: transfer/alaser-arm64-zip.part-00
+          compression-level: 0
+
+      - name: Upload ZIP transfer part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: alaser-arm64-zip-part-01
+          path: transfer/alaser-arm64-zip.part-01
+          compression-level: 0
+
+      - name: Upload checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: alaser-arm64-zip-checksum
+          path: SHA256SUMS
