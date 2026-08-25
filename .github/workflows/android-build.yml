@@ -19,6 +19,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+      - name: Prepare verified offline Linux runtime
+        run: bash scripts/prepare-linux-runtime.sh
+      - name: Verify bundled PRoot launches the real Linux rootfs
+        run: bash scripts/verify-linux-runtime.sh
       - name: Build debug APK
         run: gradle :app:assembleDebug
       - name: Run JVM and Android unit tests

@@ -86,9 +86,11 @@ class ProcessTerminal {
         workspace: File,
         timeoutSeconds: Long = 60,
         environment: Map<String, String> = emptyMap(),
+        commandPrefix: List<String>? = null,
     ): CommandResult = withTimeout(timeoutSeconds * 1_000) {
         withContext(Dispatchers.IO) {
-            val process = ProcessBuilder(defaultShell(), "-c", command)
+            val shellCommand = (commandPrefix ?: listOf(defaultShell())) + listOf("-c", command)
+            val process = ProcessBuilder(shellCommand)
                 .directory(workspace)
                 .apply { environment().putAll(environment) }
                 .start()

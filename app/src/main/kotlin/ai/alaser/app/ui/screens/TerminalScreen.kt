@@ -45,7 +45,7 @@ fun TerminalScreen(
         )
         Text(
             if (state.terminalInteractive) {
-                "Interactive PTY active · /system/bin/sh · xterm-256color"
+                "Interactive PTY active · " + (state.activeEnvironment ?: "Android shell") + " · xterm-256color"
             } else {
                 "Start a real interactive pseudo-terminal or run individual shell commands."
             },

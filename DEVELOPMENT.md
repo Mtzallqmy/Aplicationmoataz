@@ -7,6 +7,8 @@ Install a full JDK 17, Android SDK platform 35, build-tools 35, and Gradle
 that points to the SDK. Do not commit local.properties.
 
     gradle wrapper --gradle-version 8.10.2
+    bash scripts/prepare-linux-runtime.sh
+    bash scripts/verify-linux-runtime.sh
     ./gradlew clean
     ./gradlew :app:assembleDebug
     ./gradlew test

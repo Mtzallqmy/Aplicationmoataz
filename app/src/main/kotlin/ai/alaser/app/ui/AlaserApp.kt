@@ -205,6 +205,9 @@ private fun AlaserNavigation(
             LinuxEnvironmentsScreen(
                 state = state,
                 onInstall = viewModel::installLinuxEnvironment,
+                onInstallBundled = viewModel::installBundledLinux,
+                onSelect = viewModel::selectLinuxEnvironment,
+                onDelete = viewModel::deleteLinuxEnvironment,
             )
         }
     }

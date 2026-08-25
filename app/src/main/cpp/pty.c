@@ -24,11 +24,21 @@ static void throw_io(JNIEnv *env, const char *operation) {
     }
 }
 
+static void free_arguments(char **arguments, jsize count) {
+    if (arguments == NULL) return;
+    for (jsize index = 0; index < count; index++) {
+        free(arguments[index]);
+    }
+    free(arguments);
+}
+
 JNIEXPORT jintArray JNICALL
 Java_ai_alaser_app_terminal_NativePtyBridge_nativeOpen(
     JNIEnv *env,
     jobject receiver,
     jstring working_directory,
+    jobjectArray command_arguments,
+    jstring temporary_directory,
     jint rows,
     jint columns
 ) {
@@ -37,11 +47,41 @@ Java_ai_alaser_app_terminal_NativePtyBridge_nativeOpen(
     if (directory == NULL) {
         return NULL;
     }
+    const char *temporary = (*env)->GetStringUTFChars(env, temporary_directory, NULL);
+    if (temporary == NULL) {
+        (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+        return NULL;
+    }
+    jsize argument_count = (*env)->GetArrayLength(env, command_arguments);
+    char **arguments = calloc((size_t) argument_count + 1, sizeof(char *));
+    if (arguments == NULL) {
+        (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+        (*env)->ReleaseStringUTFChars(env, temporary_directory, temporary);
+        throw_io(env, "Could not allocate pseudo-terminal command arguments");
+        return NULL;
+    }
+    for (jsize index = 0; index < argument_count; index++) {
+        jstring value = (jstring) (*env)->GetObjectArrayElement(env, command_arguments, index);
+        const char *text = (*env)->GetStringUTFChars(env, value, NULL);
+        if (text == NULL || (arguments[index] = strdup(text)) == NULL) {
+            if (text != NULL) (*env)->ReleaseStringUTFChars(env, value, text);
+            (*env)->DeleteLocalRef(env, value);
+            free_arguments(arguments, argument_count);
+            (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+            (*env)->ReleaseStringUTFChars(env, temporary_directory, temporary);
+            throw_io(env, "Could not copy pseudo-terminal command arguments");
+            return NULL;
+        }
+        (*env)->ReleaseStringUTFChars(env, value, text);
+        (*env)->DeleteLocalRef(env, value);
+    }
 
     int master = posix_openpt(O_RDWR | O_NOCTTY | O_CLOEXEC);
     if (master < 0 || grantpt(master) < 0 || unlockpt(master) < 0) {
         if (master >= 0) close(master);
+        free_arguments(arguments, argument_count);
         (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+        (*env)->ReleaseStringUTFChars(env, temporary_directory, temporary);
         throw_io(env, "Could not initialize pseudo-terminal");
         return NULL;
     }
@@ -49,7 +89,9 @@ Java_ai_alaser_app_terminal_NativePtyBridge_nativeOpen(
     char slave_path[128];
     if (ptsname_r(master, slave_path, sizeof(slave_path)) != 0) {
         close(master);
+        free_arguments(arguments, argument_count);
         (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+        (*env)->ReleaseStringUTFChars(env, temporary_directory, temporary);
         throw_io(env, "Could not resolve pseudo-terminal slave");
         return NULL;
     }
@@ -62,7 +104,9 @@ Java_ai_alaser_app_terminal_NativePtyBridge_nativeOpen(
     };
     if (ioctl(master, TIOCSWINSZ, &size) < 0) {
         close(master);
+        free_arguments(arguments, argument_count);
         (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+        (*env)->ReleaseStringUTFChars(env, temporary_directory, temporary);
         throw_io(env, "Could not set pseudo-terminal size");
         return NULL;
     }
@@ -70,7 +114,9 @@ Java_ai_alaser_app_terminal_NativePtyBridge_nativeOpen(
     pid_t child = fork();
     if (child < 0) {
         close(master);
+        free_arguments(arguments, argument_count);
         (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+        (*env)->ReleaseStringUTFChars(env, temporary_directory, temporary);
         throw_io(env, "Could not start pseudo-terminal shell");
         return NULL;
     }
@@ -87,11 +133,15 @@ Java_ai_alaser_app_terminal_NativePtyBridge_nativeOpen(
         close(master);
         if (chdir(directory) < 0) _exit(126);
         setenv("TERM", "xterm-256color", 1);
-        execl("/system/bin/sh", "sh", "-i", (char *) NULL);
+        setenv("PROOT_TMP_DIR", temporary, 1);
+        execv(arguments[0], arguments);
+        dprintf(STDERR_FILENO, "Could not execute %s: %s\r\n", arguments[0], strerror(errno));
         _exit(127);
     }
 
+    free_arguments(arguments, argument_count);
     (*env)->ReleaseStringUTFChars(env, working_directory, directory);
+    (*env)->ReleaseStringUTFChars(env, temporary_directory, temporary);
     jint values[2] = {master, (jint) child};
     jintArray result = (*env)->NewIntArray(env, 2);
     if (result == NULL) {

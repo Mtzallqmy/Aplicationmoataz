@@ -12,6 +12,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +26,9 @@ import ai.alaser.app.ui.AppUiState
 fun LinuxEnvironmentsScreen(
     state: AppUiState,
     onInstall: (String, String, String) -> Unit,
+    onInstallBundled: () -> Unit,
+    onSelect: (String?) -> Unit,
+    onDelete: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("https://") }
@@ -37,11 +41,29 @@ fun LinuxEnvironmentsScreen(
     ) {
         item {
             Text(
-                "Install a trusted ZIP or tar.gz root filesystem. A verified SHA-256 checksum is mandatory. " +
-                    "A separately supplied PRoot executable is still required to run the environment.",
+                "Alpine Linux and the PRoot execution engine are included in this app. " +
+                    "Install the bundled environment without downloading anything, or add a verified custom rootfs.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+        item {
+            Button(
+                onClick = onInstallBundled,
+                enabled = "alpine" !in state.installedEnvironments,
+            ) { Text(if ("alpine" in state.installedEnvironments) "Alpine Linux installed" else "Install bundled Alpine Linux") }
+        }
+        item {
+            Text(
+                "Current project environment: " + (state.activeEnvironment ?: "Native Android shell"),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (state.activeEnvironment != null) {
+            item {
+                TextButton(onClick = { onSelect(null) }) { Text("Use native Android shell") }
+            }
+        }
+        item { Text("Add another verified Linux distribution", style = MaterialTheme.typography.titleMedium) }
         item {
             OutlinedTextField(
                 value = name,
@@ -81,7 +103,14 @@ fun LinuxEnvironmentsScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(environment, style = MaterialTheme.typography.titleMedium)
-                    Text("Verified local root filesystem")
+                    Text(if (state.activeEnvironment == environment) "Active for this project" else "Verified local root filesystem")
+                    androidx.compose.foundation.layout.Row {
+                        TextButton(
+                            onClick = { onSelect(environment) },
+                            enabled = state.activeWorkspace != null && state.activeEnvironment != environment,
+                        ) { Text("Use in terminal and agent") }
+                        TextButton(onClick = { onDelete(environment) }) { Text("Remove") }
+                    }
                 }
             }
         }

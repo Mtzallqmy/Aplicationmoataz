@@ -16,5 +16,17 @@ Their licenses are summarized in docs/licenses/dependency-audit.md and must be
 revalidated against resolved dependency trees before distribution.
 
 The Termux application repository is GPLv3-only, with explicit Apache-2.0
-exceptions for terminal-view and terminal-emulator. PRoot-Distro includes GPL
-license terms. Neither project's source or executables are bundled here.
+exceptions for terminal-view and terminal-emulator. No Termux or PRoot-Distro
+source code is copied or bundled.
+
+The APK bundles Alpine Linux's unmodified `proot-static` 5.4.0-r2 executables,
+licensed GPL-2.0-or-later, as separate runnable native artifacts. Upstream source
+is available at https://github.com/proot-me/proot and the exact Alpine packaging
+recipe is available at https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/community/proot.
+The corresponding official package metadata is available at
+https://pkgs.alpinelinux.org/package/v3.24/community/aarch64/proot-static.
+
+The APK also bundles unmodified Alpine Linux 3.24.1 minirootfs archives for
+arm64 and x86_64. Each contained package retains its own upstream license.
+Official image downloads and published SHA-256 checksums are available at
+https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/.

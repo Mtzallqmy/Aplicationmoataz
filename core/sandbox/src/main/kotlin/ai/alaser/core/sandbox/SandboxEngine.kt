@@ -2,12 +2,14 @@ package ai.alaser.core.sandbox
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import java.io.File
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -64,6 +66,9 @@ class ProotBackend(
             executable.absolutePath,
             "--rootfs=" + rootfs.absolutePath,
             "--bind=" + workspace.absolutePath + ":/workspace",
+            "--bind=/dev",
+            "--bind=/proc",
+            "--bind=/sys",
             "--cwd=/workspace",
             "--link2symlink",
             "/bin/sh",
@@ -76,33 +81,57 @@ class RootfsInstaller(
     private val client: OkHttpClient = OkHttpClient(),
 ) {
     fun install(descriptor: LinuxEnvironmentDescriptor): Flow<EnvironmentInstallEvent> = flow {
-        require(descriptor.sha256.matches(Regex("[a-fA-F0-9]{64}"))) {
-            "A verified SHA-256 checksum is required before downloading a Linux image."
-        }
         require(descriptor.archiveUrl.startsWith("https://")) {
             "Linux images must be downloaded over HTTPS."
         }
+        validateDescriptor(descriptor)
+        client.newCall(Request.Builder().url(descriptor.archiveUrl).build()).execute().use { response ->
+            check(response.isSuccessful) { "Root filesystem download failed with HTTP " + response.code + "." }
+            val body = requireNotNull(response.body) { "The image download response was empty." }
+            body.byteStream().use { input ->
+                installFromStream(descriptor, input, body.contentLength().takeIf { it >= 0 })
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    fun installBundled(
+        descriptor: LinuxEnvironmentDescriptor,
+        openArchive: () -> InputStream,
+    ): Flow<EnvironmentInstallEvent> = flow {
+        validateDescriptor(descriptor)
+        openArchive().use { input ->
+            installFromStream(descriptor, input, null)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun validateDescriptor(descriptor: LinuxEnvironmentDescriptor) {
+        require(descriptor.sha256.matches(Regex("[a-fA-F0-9]{64}"))) {
+            "A verified SHA-256 checksum is required before installing a Linux image."
+        }
+        require(descriptor.id.matches(Regex("[a-zA-Z0-9][a-zA-Z0-9_-]*"))) {
+            "The Linux environment identifier contains unsafe characters."
+        }
+    }
+
+    private suspend fun FlowCollector<EnvironmentInstallEvent>.installFromStream(
+        descriptor: LinuxEnvironmentDescriptor,
+        input: InputStream,
+        total: Long?,
+    ) {
         Files.createDirectories(environmentsDirectory.toPath())
         val temporaryArchive = File(environmentsDirectory, descriptor.id + ".download")
         val destination = File(environmentsDirectory, descriptor.id)
 
         try {
-            client.newCall(Request.Builder().url(descriptor.archiveUrl).build()).execute().use { response ->
-                check(response.isSuccessful) { "Root filesystem download failed with HTTP " + response.code + "." }
-                val body = requireNotNull(response.body) { "The image download response was empty." }
-                val total = body.contentLength().takeIf { it >= 0 }
-                body.byteStream().use { input ->
-                    temporaryArchive.outputStream().buffered().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var downloaded = 0L
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            output.write(buffer, 0, read)
-                            downloaded += read
-                            emit(EnvironmentInstallEvent.Downloading(downloaded, total))
-                        }
-                    }
+            temporaryArchive.outputStream().buffered().use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var downloaded = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    downloaded += read
+                    emit(EnvironmentInstallEvent.Downloading(downloaded, total))
                 }
             }
 
@@ -125,7 +154,7 @@ class RootfsInstaller(
         } finally {
             temporaryArchive.delete()
         }
-    }.flowOn(Dispatchers.IO)
+    }
 
     private fun extract(archive: File, destination: Path, url: String): Int =
         if (url.substringBefore('?').endsWith(".zip")) extractZip(archive, destination)

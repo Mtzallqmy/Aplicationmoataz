@@ -28,4 +28,18 @@ class ProcessTerminalTest {
         assertTrue(result.stderr.contains("error"))
         terminal.close()
     }
+
+    @Test
+    fun honorsSelectedShellPrefixAndEnvironment() = runBlocking {
+        val terminal = ProcessTerminal()
+        val result = terminal.execute(
+            "printf '%s' \"\u0024ALASER_SELECTED_ENVIRONMENT\"",
+            temporary.newFolder("sandbox-workspace"),
+            environment = mapOf("ALASER_SELECTED_ENVIRONMENT" to "linux"),
+            commandPrefix = listOf(ProcessTerminal.defaultShell()),
+        )
+        assertEquals(0, result.exitCode)
+        assertEquals("linux\n", result.stdout)
+        terminal.close()
+    }
 }

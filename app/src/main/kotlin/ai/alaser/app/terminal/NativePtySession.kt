@@ -18,7 +18,13 @@ internal object NativePtyBridge {
         System.loadLibrary("alaser_pty")
     }
 
-    external fun nativeOpen(workingDirectory: String, rows: Int, columns: Int): IntArray
+    external fun nativeOpen(
+        workingDirectory: String,
+        arguments: Array<String>,
+        temporaryDirectory: String,
+        rows: Int,
+        columns: Int,
+    ): IntArray
     external fun nativeRead(descriptor: Int): ByteArray?
     external fun nativeWrite(descriptor: Int, input: ByteArray)
     external fun nativeResize(descriptor: Int, rows: Int, columns: Int)
@@ -74,9 +80,22 @@ class NativePtySession private constructor(
     }
 
     companion object {
-        fun open(workspace: File, rows: Int = 30, columns: Int = 100): NativePtySession {
+        fun open(
+            workspace: File,
+            command: List<String> = listOf("/system/bin/sh", "-i"),
+            temporaryDirectory: File = workspace,
+            rows: Int = 30,
+            columns: Int = 100,
+        ): NativePtySession {
             require(workspace.isDirectory) { "A valid workspace is required for an interactive terminal." }
-            val result = NativePtyBridge.nativeOpen(workspace.absolutePath, rows, columns)
+            require(command.isNotEmpty()) { "An executable command is required for an interactive terminal." }
+            val result = NativePtyBridge.nativeOpen(
+                workspace.absolutePath,
+                command.toTypedArray(),
+                temporaryDirectory.absolutePath,
+                rows,
+                columns,
+            )
             require(result.size == 2) { "The native PTY did not return a descriptor and process identifier." }
             return NativePtySession(result[0], result[1])
         }

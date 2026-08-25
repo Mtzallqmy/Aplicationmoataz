@@ -16,6 +16,8 @@ import kotlinx.serialization.json.put
 class ToolRegistry(
     private val filesystem: WorkspaceFileSystem,
     private val terminal: ProcessTerminal,
+    private val commandPrefix: List<String>? = null,
+    private val environment: Map<String, String> = emptyMap(),
 ) {
     private val riskAnalyzer = CommandRiskAnalyzer()
 
@@ -79,7 +81,13 @@ class ToolRegistry(
     }
 
     private suspend fun command(invocation: ToolInvocation, command: String): ToolExecutionResult {
-        val output = terminal.execute(command, filesystem.root(), timeoutSeconds = 120)
+        val output = terminal.execute(
+            command,
+            filesystem.root(),
+            timeoutSeconds = 120,
+            environment = environment,
+            commandPrefix = commandPrefix,
+        )
         val combined = buildString {
             append(output.stdout)
             if (output.stderr.isNotBlank()) append(output.stderr)

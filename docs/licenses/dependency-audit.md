@@ -14,6 +14,8 @@ Audit date: 2026-08-25.
 | kotlinx.serialization | github.com/Kotlin/kotlinx.serialization | 1.8.0 | Apache-2.0 | JSON/domain serialization | No |
 | OkHttp | github.com/square/okhttp | 4.12.0 | Apache-2.0 | HTTP/SSE clients | No |
 | Commons Compress | commons.apache.org/proper/commons-compress | 1.27.1 | Apache-2.0 | Safe tar archive reading | No |
+| PRoot static executable | pkgs.alpinelinux.org/package/v3.24/community/aarch64/proot-static | 5.4.0-r2 | GPL-2.0-or-later | Bundled rootless Linux execution, arm64 and x86_64 | Official unmodified binary |
+| Alpine Linux minirootfs | dl-cdn.alpinelinux.org/alpine/v3.24/releases | 3.24.1 | Per-package open-source licenses | Bundled offline Linux root filesystem | Official unmodified archive |
 | JUnit 4 | github.com/junit-team/junit4 | 4.13.2 | EPL-1.0 | Unit tests only | No |
 | OpenCode | github.com/anomalyco/opencode | Reference only | MIT | Agent architecture reference | No |
 | Cline | github.com/cline/cline | Reference only | Apache-2.0 | Approval/tool architecture reference | No |
@@ -21,6 +23,8 @@ Audit date: 2026-08-25.
 | PRoot-Distro | github.com/termux/proot-distro | Reference only | GPL terms; review source tree before use | Rootfs lifecycle reference | No |
 | OpenHands | github.com/OpenHands/OpenHands | Reference only | Verify before any code reuse | Sandbox architecture reference | No |
 
-The build environment could not resolve Gradle dependencies. Versions,
-transitive dependencies, current advisories, and distribution notices must be
-rechecked after a real Gradle build.
+GitHub Actions resolves, builds, tests, and lint-checks the declared dependencies.
+The official root filesystem SHA-256 is verified before packaging. PRoot remains
+an unmodified, separately executable GPL-2.0-or-later component; upstream source:
+https://github.com/proot-me/proot. Alpine package build definitions:
+https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/community/proot.

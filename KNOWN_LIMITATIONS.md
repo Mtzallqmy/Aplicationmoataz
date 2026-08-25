@@ -19,13 +19,17 @@ special-key handling, shell tabs, and terminal emulation are not complete.
 
 ## Linux sandbox
 
-The project does not ship PRoot, a Debian root filesystem, a verified image
-catalog, or Android-native PRoot executable packaging. Its settings screen can
-download and verify user-supplied rootfs archives. The installer supports ZIP
-and tar.gz archives, not tar.xz or OCI layers.
+Release preparation bundles official Alpine Linux 3.24.1 root filesystems and
+unmodified statically linked PRoot 5.4.0-r2 executables for ARM64 and x86_64.
+Users can install Alpine offline; both the real PTY and agent shell tools use
+the Linux environment selected for their workspace. GitHub Actions exercises
+the actual x86_64 PRoot binary and rootfs together. Android-device behavior
+cannot be verified without a physical device or emulator.
 
-PRoot invocation exists as an adapter but has not been run or verified on an
-Android device. Node, Python, Git, Rust, and package managers are not supplied.
+Alpine includes its `apk` package manager; Node.js, Python, Git, and Rust are
+not preinstalled and must be installed in the selected environment when needed.
+Debian and Ubuntu can be imported as SHA-256-verified user-supplied ZIP or
+tar.gz archives, but are not bundled. tar.xz and OCI layers are unsupported.
 
 ## Integrations
 

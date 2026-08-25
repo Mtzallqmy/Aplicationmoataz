@@ -15,6 +15,8 @@ import ai.alaser.core.model.McpServerConfiguration
 import ai.alaser.core.model.TelegramBotConfiguration
 import ai.alaser.core.model.Workspace
 import ai.alaser.core.sandbox.RootfsInstaller
+import ai.alaser.core.sandbox.LinuxEnvironmentDescriptor
+import ai.alaser.core.sandbox.ProotBackend
 import ai.alaser.core.security.AndroidSecretStore
 import ai.alaser.core.terminal.ProcessTerminal
 import ai.alaser.integration.mcp.McpHttpClient
@@ -28,8 +30,10 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.net.URI
 import java.util.UUID
+import java.util.Properties
 
 class AlaserRepository(context: Context) {
+    private val applicationContext = context.applicationContext
     private val database = AlaserDatabase(context)
     private val secrets = AndroidSecretStore(context)
     private val preferences = context.getSharedPreferences("alaser_integrations", Context.MODE_PRIVATE)
@@ -201,6 +205,66 @@ class AlaserRepository(context: Context) {
 
     fun linuxEnvironments(): List<File> =
         environmentsDirectory.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }.orEmpty()
+
+    fun bundledLinuxDescriptor(): LinuxEnvironmentDescriptor {
+        val manifest = Properties().apply {
+            applicationContext.assets.open("linux/manifest.properties").use { load(it) }
+        }
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull { manifest.containsKey(it + ".filename") }
+            ?: error("This device architecture does not have a bundled Linux environment.")
+        val filename = manifest.getProperty(abi + ".filename")
+        val checksum = manifest.getProperty(abi + ".sha256")
+        val version = manifest.getProperty(abi + ".version")
+        return LinuxEnvironmentDescriptor(
+            id = "alpine",
+            displayName = "Alpine Linux " + version,
+            architecture = abi,
+            archiveUrl = "asset://linux/" + filename,
+            sha256 = checksum,
+        )
+    }
+
+    fun bundledLinuxArchive(descriptor: LinuxEnvironmentDescriptor): java.io.InputStream {
+        val filename = descriptor.archiveUrl.removePrefix("asset://")
+        require(filename.startsWith("linux/") && !filename.contains("..")) {
+            "The bundled Linux archive path is invalid."
+        }
+        return applicationContext.assets.open(filename)
+    }
+
+    fun selectedEnvironment(workspace: Workspace): String? =
+        preferences.getString("workspace_environment_" + workspace.id, null)
+
+    fun selectEnvironment(workspace: Workspace, identifier: String?) {
+        if (identifier != null) {
+            require(linuxEnvironments().any { it.name == identifier }) {
+                "The selected Linux environment is not installed."
+            }
+        }
+        preferences.edit().putString("workspace_environment_" + workspace.id, identifier).apply()
+    }
+
+    fun sandboxCommand(workspace: Workspace): List<String>? {
+        val identifier = selectedEnvironment(workspace) ?: return null
+        val rootfs = linuxEnvironments().firstOrNull { it.name == identifier }
+            ?: error("The selected Linux environment is no longer installed.")
+        val executable = File(applicationContext.applicationInfo.nativeLibraryDir, "libproot_exec.so")
+        return ProotBackend(executable, rootfs).commandPrefix(File(workspace.rootPath))
+    }
+
+    fun sandboxTemporaryDirectory(): File = applicationContext.cacheDir.apply { mkdirs() }
+
+    fun deleteLinuxEnvironment(identifier: String) {
+        val environment = linuxEnvironments().firstOrNull { it.name == identifier }
+            ?: error("The selected Linux environment is not installed.")
+        require(environment.canonicalFile.parentFile == environmentsDirectory.canonicalFile) {
+            "The Linux environment path escaped its managed directory."
+        }
+        database.listWorkspaces().filter { selectedEnvironment(it) == identifier }.forEach {
+            selectEnvironment(it, null)
+        }
+        check(environment.deleteRecursively()) { "The Linux environment could not be removed safely." }
+    }
 
     private fun readTelegramBots(): List<TelegramBotConfiguration> =
         preferences.getString("telegram_bots", null)

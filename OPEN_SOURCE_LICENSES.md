@@ -2,6 +2,11 @@
 
 ## Intended direct dependency licenses
 
+- Bundled PRoot 5.4.0-r2: GPL-2.0-or-later, distributed unmodified as a
+  separate executable. Upstream corresponding source: https://github.com/proot-me/proot.
+- Bundled Alpine Linux 3.24.1: each included Alpine package retains its own
+  license and attribution. Image source: https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/.
+
 - Kotlin, kotlinx.coroutines, and kotlinx.serialization: Apache License 2.0.
 - AndroidX, Jetpack Compose, Material 3, and Android Gradle Plugin: Apache
   License 2.0 or the applicable Android SDK/build-tool terms.

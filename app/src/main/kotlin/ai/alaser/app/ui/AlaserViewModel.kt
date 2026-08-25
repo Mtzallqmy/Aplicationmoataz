@@ -48,6 +48,7 @@ data class AppUiState(
     val mcpServers: List<McpServerConfiguration> = emptyList(),
     val mcpTools: List<McpToolDescription> = emptyList(),
     val installedEnvironments: List<String> = emptyList(),
+    val activeEnvironment: String? = null,
     val integrationStatus: String? = null,
     val environmentStatus: String? = null,
     val activeWorkspace: Workspace? = null,
@@ -83,11 +84,13 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.workspaces.collect { workspaces ->
                 stateValue.update { current ->
+                    val selectedWorkspace = current.activeWorkspace?.let { selected ->
+                        workspaces.firstOrNull { it.id == selected.id }
+                    } ?: workspaces.firstOrNull()
                     current.copy(
                         workspaces = workspaces,
-                        activeWorkspace = current.activeWorkspace?.let { selected ->
-                            workspaces.firstOrNull { it.id == selected.id }
-                        } ?: workspaces.firstOrNull(),
+                        activeWorkspace = selectedWorkspace,
+                        activeEnvironment = selectedWorkspace?.let(repository::selectedEnvironment),
                     )
                 }
                 loadFiles()
@@ -120,7 +123,13 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
 
     fun createWorkspace(name: String) = safely {
         val workspace = repository.createWorkspace(name)
-        stateValue.update { it.copy(activeWorkspace = workspace, currentDirectory = ".") }
+        stateValue.update {
+            it.copy(
+                activeWorkspace = workspace,
+                activeEnvironment = repository.selectedEnvironment(workspace),
+                currentDirectory = ".",
+            )
+        }
         loadFiles()
     }
 
@@ -128,6 +137,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         stateValue.update {
             it.copy(
                 activeWorkspace = workspace,
+                activeEnvironment = repository.selectedEnvironment(workspace),
                 activeSession = null,
                 messages = emptyList(),
                 currentDirectory = ".",
@@ -256,18 +266,62 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
             archiveUrl = archiveUrl.trim(),
             sha256 = sha256.trim(),
         )
-        repository.rootfsInstaller.install(descriptor).collect { event ->
-            val status = when (event) {
-                is EnvironmentInstallEvent.Downloading -> {
-                    val total = event.totalBytes?.let { " / " + it } ?: ""
-                    "Downloading " + event.downloadedBytes + total + " bytes"
-                }
-                is EnvironmentInstallEvent.Verifying -> "Verifying SHA-256 checksum"
-                is EnvironmentInstallEvent.Extracting -> "Extracted " + event.filesExtracted + " entries"
-                is EnvironmentInstallEvent.Installed -> "Installed " + event.directory.name
+        repository.rootfsInstaller.install(descriptor).collect(::handleEnvironmentInstallEvent)
+    }
+
+    fun installBundledLinux() = safely {
+        val descriptor = repository.bundledLinuxDescriptor()
+        repository.rootfsInstaller.installBundled(descriptor) {
+            repository.bundledLinuxArchive(descriptor)
+        }.collect(::handleEnvironmentInstallEvent)
+    }
+
+    fun selectLinuxEnvironment(identifier: String?) = safely {
+        val workspace = stateValue.value.activeWorkspace
+            ?: error("Create and select a project before choosing a Linux environment.")
+        stopInteractiveTerminal()
+        repository.selectEnvironment(workspace, identifier)
+        stateValue.update {
+            it.copy(
+                activeEnvironment = identifier,
+                environmentStatus = if (identifier == null) {
+                    "Using the native Android shell."
+                } else {
+                    "Using " + identifier + " for this project's terminal and coding agent."
+                },
+            )
+        }
+    }
+
+    fun deleteLinuxEnvironment(identifier: String) = safely {
+        if (stateValue.value.activeEnvironment == identifier) stopInteractiveTerminal()
+        repository.deleteLinuxEnvironment(identifier)
+        refreshEnvironments()
+        stateValue.update {
+            it.copy(
+                activeEnvironment = it.activeEnvironment?.takeUnless { current -> current == identifier },
+                environmentStatus = "Removed Linux environment " + identifier + ".",
+            )
+        }
+    }
+
+    private suspend fun handleEnvironmentInstallEvent(event: EnvironmentInstallEvent) {
+        val status = when (event) {
+            is EnvironmentInstallEvent.Downloading -> {
+                val total = event.totalBytes?.let { " / " + it } ?: ""
+                "Preparing " + event.downloadedBytes + total + " bytes"
             }
-            stateValue.update { it.copy(environmentStatus = status) }
-            if (event is EnvironmentInstallEvent.Installed) refreshEnvironments()
+            is EnvironmentInstallEvent.Verifying -> "Verifying SHA-256 checksum"
+            is EnvironmentInstallEvent.Extracting -> "Extracted " + event.filesExtracted + " entries"
+            is EnvironmentInstallEvent.Installed -> "Installed " + event.directory.name
+        }
+        stateValue.update { it.copy(environmentStatus = status) }
+        if (event is EnvironmentInstallEvent.Installed) {
+            refreshEnvironments()
+            stateValue.value.activeWorkspace?.let { workspace ->
+                repository.selectEnvironment(workspace, event.directory.name)
+                stateValue.update { it.copy(activeEnvironment = event.directory.name) }
+            }
         }
     }
 
@@ -314,7 +368,12 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
 
                 val runtime = AgentRuntime(
                     provider = repository.provider(configuration),
-                    registry = ToolRegistry(repository.filesystem(workspace), repository.terminal),
+                    registry = ToolRegistry(
+                        repository.filesystem(workspace),
+                        repository.terminal,
+                        repository.sandboxCommand(workspace),
+                        mapOf("PROOT_TMP_DIR" to repository.sandboxTemporaryDirectory().absolutePath),
+                    ),
                     approvals = ApprovalEngine(
                         ApprovalHandler { approval ->
                             CompletableDeferred<ApprovalDecision>().also { deferred ->
@@ -444,7 +503,13 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
             return@safely
         }
         val workspace = stateValue.value.activeWorkspace ?: return@safely
-        val output = repository.terminal.execute(command, File(workspace.rootPath), timeoutSeconds = 120)
+        val output = repository.terminal.execute(
+            command,
+            File(workspace.rootPath),
+            timeoutSeconds = 120,
+            environment = mapOf("PROOT_TMP_DIR" to repository.sandboxTemporaryDirectory().absolutePath),
+            commandPrefix = repository.sandboxCommand(workspace),
+        )
         val block = "$ " + command + "\n" + output.stdout + output.stderr + "[exit " + output.exitCode + "]\n"
         stateValue.update { it.copy(terminalOutput = (it.terminalOutput + block).takeLast(150_000)) }
     }
@@ -452,7 +517,12 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     fun startInteractiveTerminal() = safely {
         val workspace = stateValue.value.activeWorkspace ?: return@safely
         stopInteractiveTerminal()
-        val session = NativePtySession.open(File(workspace.rootPath))
+        val command = repository.sandboxCommand(workspace)?.plus("-i") ?: listOf("/system/bin/sh", "-i")
+        val session = NativePtySession.open(
+            workspace = File(workspace.rootPath),
+            command = command,
+            temporaryDirectory = repository.sandboxTemporaryDirectory(),
+        )
         terminalSession = session
         stateValue.update { it.copy(terminalInteractive = true) }
         terminalReader = viewModelScope.launch {

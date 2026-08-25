@@ -19,8 +19,11 @@ https://github.com/Mtzallqmy/Aplicationmoataz.
 - A real Android NDK/JNI pseudo-terminal with interactive shell I/O, terminal
   resize support, CTRL+C/TAB/ESC controls, and ARM64/x86_64 native builds.
 - A separate process-backed command executor for agent tool calls.
-- A checksum-verified root filesystem installer and a PRoot backend that works
-  only when a compatible executable and valid root filesystem are supplied.
+- Official Alpine Linux 3.24.1 root filesystems and static PRoot 5.4.0-r2
+  executables bundled for ARM64 and x86_64; offline installation needs no
+  external Termux app, root permission, or separate executable.
+- Per-workspace Linux environment selection shared by the interactive PTY and
+  the coding agent's actual shell/Git tool execution.
 - User-configurable Telegram bots with encrypted tokens, mandatory user
   allowlists, connection testing, local long polling, and agent task routing.
 - User-configurable MCP HTTP servers with tool inspection and explicit trust.
@@ -43,6 +46,8 @@ The wrapper properties are committed, but gradle-wrapper.jar is not bundled.
 On a machine with Gradle installed:
 
     gradle wrapper --gradle-version 8.10.2
+    bash scripts/prepare-linux-runtime.sh
+    bash scripts/verify-linux-runtime.sh
     ./gradlew :app:assembleDebug
     ./gradlew test
     ./gradlew :app:lintDebug
@@ -64,9 +69,12 @@ and uploads the APK as a downloadable workflow artifact.
 5. Approve file writes and shell commands when requested.
 6. Review generated content under Workspace Files.
 
-Android's native shell does not include Python, Node.js, or Git by default.
-Those tools require a functioning separately provisioned Linux environment or
-another backend.
+For a full Linux workspace, open Settings → Linux Environments and choose
+"Install bundled Alpine Linux". Installation is offline because the verified
+rootfs and PRoot executable are included in the APK. The installed environment
+is selected for the active project and immediately powers both Terminal and
+agent shell tools. Install optional language toolchains with Alpine's `apk`
+package manager, for example `apk add python3 git nodejs npm`.
 
 ## Repository layout
 
