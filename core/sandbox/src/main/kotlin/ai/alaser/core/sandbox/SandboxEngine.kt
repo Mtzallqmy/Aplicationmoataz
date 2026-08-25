@@ -187,11 +187,16 @@ class RootfsInstaller(
                 when {
                     entry.isDirectory -> Files.createDirectories(path)
                     entry.isSymbolicLink || entry.isLink -> {
-                        val target = path.parent.resolve(entry.linkName).normalize()
+                        val linkName = Path.of(entry.linkName)
+                        val target = when {
+                            linkName.isAbsolute -> destination.resolve(entry.linkName.removePrefix("/")).normalize()
+                            entry.isLink -> destination.resolve(entry.linkName.removePrefix("./")).normalize()
+                            else -> path.parent.resolve(linkName).normalize()
+                        }
                         require(target.startsWith(destination)) { "Archive link escapes the Linux environment." }
                         Files.createDirectories(path.parent)
                         if (entry.isSymbolicLink) {
-                            Files.createSymbolicLink(path, Path.of(entry.linkName))
+                            Files.createSymbolicLink(path, path.parent.relativize(target))
                         } else {
                             Files.createLink(path, target)
                         }

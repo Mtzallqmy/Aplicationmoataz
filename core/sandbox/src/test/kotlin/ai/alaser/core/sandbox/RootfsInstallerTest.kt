@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 
 class RootfsInstallerTest {
@@ -36,6 +37,9 @@ class RootfsInstallerTest {
         val installed = events.last() as EnvironmentInstallEvent.Installed
         assertTrue(File(installed.directory, "bin/sh").canExecute())
         assertEquals("Alaser Linux", File(installed.directory, "etc/os-release").readText())
+        val guestLink = File(installed.directory, "usr/bin/sh").toPath()
+        assertTrue(Files.isSymbolicLink(guestLink))
+        assertTrue("Guest absolute links must stay inside the host rootfs.", Files.exists(guestLink))
     }
 
     @Test
@@ -62,6 +66,10 @@ class RootfsInstallerTest {
         TarArchiveOutputStream(GZIPOutputStream(output)).use { tar ->
             writeEntry(tar, "bin/sh", "#!/bin/sh\n", 0b111101101)
             writeEntry(tar, "etc/os-release", "Alaser Linux", 0b110100100)
+            val guestLink = TarArchiveEntry("usr/bin/sh", org.apache.commons.compress.archivers.tar.TarConstants.LF_SYMLINK)
+            guestLink.linkName = "/bin/sh"
+            tar.putArchiveEntry(guestLink)
+            tar.closeArchiveEntry()
         }
         return output.toByteArray()
     }
