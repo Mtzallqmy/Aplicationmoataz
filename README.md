@@ -21,10 +21,10 @@ https://github.com/Mtzallqmy/Aplicationmoataz.
 - Arabic and English user interfaces with in-app language selection and RTL support.
 - AES-256-GCM provider-secret encryption with Android Keystore.
 - A real Android NDK/JNI pseudo-terminal with interactive shell I/O, terminal
-  resize support, CTRL+C/TAB/ESC controls, and ARM64/x86_64 native builds.
+  resize support, CTRL+C/TAB/ESC controls, and an ARM64 native build.
 - A separate process-backed command executor for agent tool calls.
 - Official Ubuntu 24.04 Developer, Alpine Linux 3.24.1, and static PRoot
-  5.4.0-r2 executables bundled for ARM64 and x86_64. Ubuntu includes Python,
+  5.4.0-r2 executable bundled for ARM64. Ubuntu includes Python,
   pip, Git, Node.js, npm, GCC/G++, Java 17, Go, Rust, Cargo, CMake, SSH,
   SQLite, ripgrep, and utilities. No external app, root, or tool download is required.
 - Per-workspace Linux environment selection shared by the interactive PTY and

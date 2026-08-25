@@ -20,13 +20,14 @@ special-key handling, shell tabs, and terminal emulation are not complete.
 ## Linux sandbox
 
 Release preparation bundles Ubuntu 24.04 Developer, Alpine Linux 3.24.1, and
-unmodified statically linked PRoot 5.4.0-r2 executables for ARM64 and x86_64.
+an unmodified statically linked PRoot 5.4.0-r2 executable for ARM64.
 Ubuntu contains preinstalled Python/pip, Git, Node.js/npm, Java 17, Go, Rust,
 Cargo, GCC/G++, Make, CMake, SSH, SQLite, ripgrep, and related developer tools.
 The application begins installing Ubuntu automatically and selects it for new
 projects. Both the real PTY and agent shell tools use the selected environment.
-GitHub Actions verifies both actual x86_64 PRoot environments, all major Ubuntu
-toolchains, and the application's rootfs installer. Android-device behavior
+GitHub Actions verifies the ARM64 executable architecture, launches both ARM64
+root filesystems under QEMU, checks all major Ubuntu toolchains, and tests the
+application's rootfs installer. Android-device behavior
 cannot be verified without a physical device or emulator.
 
 Debian can be imported as a verified ZIP or tar.gz image; tar.xz and OCI layer

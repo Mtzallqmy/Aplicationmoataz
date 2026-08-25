@@ -30,7 +30,7 @@ jobs:
           platforms: arm64
       - name: Prepare verified offline Linux runtime
         run: bash scripts/prepare-linux-runtime.sh
-      - name: Verify bundled PRoot launches the real Linux rootfs
+      - name: Verify bundled ARM64 PRoot and real Linux root filesystems
         run: bash scripts/verify-linux-runtime.sh
       - name: Build debug APK
         run: gradle :app:assembleDebug

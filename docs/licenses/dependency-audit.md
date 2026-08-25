@@ -14,9 +14,9 @@ Audit date: 2026-08-25.
 | kotlinx.serialization | github.com/Kotlin/kotlinx.serialization | 1.8.0 | Apache-2.0 | JSON/domain serialization | No |
 | OkHttp | github.com/square/okhttp | 4.12.0 | Apache-2.0 | HTTP/SSE clients | No |
 | Commons Compress | commons.apache.org/proper/commons-compress | 1.27.1 | Apache-2.0 | Safe tar archive reading | No |
-| PRoot static executable | pkgs.alpinelinux.org/package/v3.24/community/aarch64/proot-static | 5.4.0-r2 | GPL-2.0-or-later | Bundled rootless Linux execution, arm64 and x86_64 | Official unmodified binary |
+| PRoot static executable | pkgs.alpinelinux.org/package/v3.24/community/aarch64/proot-static | 5.4.0-r2 | GPL-2.0-or-later | Bundled rootless Linux execution, ARM64 | Official unmodified binary |
 | Alpine Linux minirootfs | dl-cdn.alpinelinux.org/alpine/v3.24/releases | 3.24.1 | Per-package open-source licenses | Bundled offline Linux root filesystem | Official unmodified archive |
-| Ubuntu base image | hub.docker.com/_/ubuntu | 24.04 LTS | Per-package open-source licenses | Bundled Ubuntu developer rootfs, arm64 and amd64 | Official image plus Ubuntu package-manager installs |
+| Ubuntu base image | hub.docker.com/_/ubuntu | 24.04 LTS | Per-package open-source licenses | Bundled Ubuntu developer rootfs, ARM64 | Official image plus Ubuntu package-manager installs |
 | Ubuntu developer packages | archive.ubuntu.com / ports.ubuntu.com | Ubuntu 24.04 package versions | GPL/LGPL/Apache/MIT and other per-package licenses | Offline Python, Git, Node, Java, Go, Rust, GCC and utilities | Official unmodified packages |
 | JUnit 4 | github.com/junit-team/junit4 | 4.13.2 | EPL-1.0 | Unit tests only | No |
 | OpenCode | github.com/anomalyco/opencode | Reference only | MIT | Agent architecture reference | No |
