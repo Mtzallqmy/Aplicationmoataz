@@ -19,6 +19,9 @@ fun SettingsScreen(
     state: AppUiState,
     onOpenProviders: () -> Unit,
     onOpenFiles: () -> Unit,
+    onOpenTelegram: () -> Unit,
+    onOpenMcp: () -> Unit,
+    onOpenEnvironments: () -> Unit,
 ) {
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -45,13 +48,25 @@ fun SettingsScreen(
             InformationCard("Privacy", "Local-first storage · telemetry disabled · provider requests are direct")
         }
         item {
-            InformationCard("Sandbox", "Native interactive PTY available. PRoot requires a separately audited executable.")
+            SettingsCard(
+                title = "Linux Environments",
+                detail = state.installedEnvironments.size.toString() + " installed · verified rootfs downloads",
+                onClick = onOpenEnvironments,
+            )
         }
         item {
-            InformationCard("Telegram", "Long-polling client is implemented as an integration module; settings UI is pending.")
+            SettingsCard(
+                title = "Telegram Bots",
+                detail = state.telegramBots.size.toString() + " configured · encrypted tokens and user allowlists",
+                onClick = onOpenTelegram,
+            )
         }
         item {
-            InformationCard("MCP", "JSON-RPC HTTP transport is implemented; server-management UI is pending.")
+            SettingsCard(
+                title = "MCP Servers",
+                detail = state.mcpServers.size.toString() + " configured · inspect tools and manage trust",
+                onClick = onOpenMcp,
+            )
         }
         item {
             InformationCard("About", "Alaser AI 0.1.0 · Mobile AI development workspace")

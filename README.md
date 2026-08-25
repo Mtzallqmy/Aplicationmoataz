@@ -21,8 +21,11 @@ https://github.com/Mtzallqmy/Aplicationmoataz.
 - A separate process-backed command executor for agent tool calls.
 - A checksum-verified root filesystem installer and a PRoot backend that works
   only when a compatible executable and valid root filesystem are supplied.
-- Deny-by-default Telegram long-polling and an explicitly trusted MCP HTTP
-  client as reusable integration modules.
+- User-configurable Telegram bots with encrypted tokens, mandatory user
+  allowlists, connection testing, local long polling, and agent task routing.
+- User-configurable MCP HTTP servers with tool inspection and explicit trust.
+- A Linux rootfs settings screen with HTTPS download, mandatory SHA-256
+  verification, extraction progress, and installed-environment inventory.
 - A small Rust crate containing independently testable filesystem primitives.
 
 This is source code, not a claim that every product requirement has already

@@ -31,9 +31,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ai.alaser.app.ui.screens.ChatScreen
 import ai.alaser.app.ui.screens.FilesScreen
+import ai.alaser.app.ui.screens.LinuxEnvironmentsScreen
+import ai.alaser.app.ui.screens.McpScreen
 import ai.alaser.app.ui.screens.ProjectsScreen
 import ai.alaser.app.ui.screens.ProvidersScreen
 import ai.alaser.app.ui.screens.SettingsScreen
+import ai.alaser.app.ui.screens.TelegramScreen
 import ai.alaser.app.ui.screens.TerminalScreen
 
 private data class NavigationItem(val route: String, val label: String, val icon: ImageVector)
@@ -66,6 +69,9 @@ fun AlaserApp(viewModel: AlaserViewModel = viewModel()) {
                             "settings" -> "Settings"
                             "providers" -> "AI Providers"
                             "files" -> "Workspace Files"
+                            "telegram" -> "Telegram Bots"
+                            "mcp" -> "MCP Servers"
+                            "environments" -> "Linux Environments"
                             else -> state.activeWorkspace?.name ?: "Alaser AI"
                         },
                     )
@@ -154,6 +160,9 @@ private fun AlaserNavigation(
                 state = state,
                 onOpenProviders = { controller.navigate("providers") },
                 onOpenFiles = { controller.navigate("files") },
+                onOpenTelegram = { controller.navigate("telegram") },
+                onOpenMcp = { controller.navigate("mcp") },
+                onOpenEnvironments = { controller.navigate("environments") },
             )
         }
         composable("providers") {
@@ -174,6 +183,28 @@ private fun AlaserNavigation(
                 onEditorChanged = viewModel::updateEditor,
                 onSaveEditor = viewModel::saveEditor,
                 onCloseEditor = viewModel::closeEditor,
+            )
+        }
+        composable("telegram") {
+            TelegramScreen(
+                state = state,
+                onSave = viewModel::saveTelegramBot,
+                onTest = viewModel::testTelegramBot,
+                onToggle = viewModel::toggleTelegramBot,
+            )
+        }
+        composable("mcp") {
+            McpScreen(
+                state = state,
+                onSave = viewModel::saveMcpServer,
+                onInspect = viewModel::inspectMcpServer,
+                onToggleTrust = viewModel::toggleMcpTrust,
+            )
+        }
+        composable("environments") {
+            LinuxEnvironmentsScreen(
+                state = state,
+                onInstall = viewModel::installLinuxEnvironment,
             )
         }
     }

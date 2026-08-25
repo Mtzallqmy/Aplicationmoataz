@@ -53,6 +53,8 @@ bundled. Therefore rootless Linux is not an out-of-the-box completed feature.
 ## Integrations
 
 TelegramClient implements getMe, getUpdates long polling, user/chat allowlists,
-message-size limits, and sendMessage. MCP implements initialization, tool
-inspection, trust-gated execution, and JSON-RPC HTTP transport. These modules
-are not yet connected to complete settings or foreground-service flows.
+message-size limits, sendMessage, encrypted bot-token persistence, settings UI,
+and app-lifetime agent task routing. MCP implements initialization, tool
+inspection, trust-gated execution, JSON-RPC HTTP transport, persisted server
+configuration, and settings UI. Android foreground-service execution and cloud
+webhooks are not implemented.

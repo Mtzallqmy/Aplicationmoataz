@@ -20,18 +20,21 @@ special-key handling, shell tabs, and terminal emulation are not complete.
 ## Linux sandbox
 
 The project does not ship PRoot, a Debian root filesystem, a verified image
-catalog, a Linux installer UI, or Android-native executable packaging. The
-installer supports ZIP and tar.gz archives, not tar.xz or OCI layers.
+catalog, or Android-native PRoot executable packaging. Its settings screen can
+download and verify user-supplied rootfs archives. The installer supports ZIP
+and tar.gz archives, not tar.xz or OCI layers.
 
 PRoot invocation exists as an adapter but has not been run or verified on an
 Android device. Node, Python, Git, Rust, and package managers are not supplied.
 
 ## Integrations
 
-Telegram long polling and HTTP MCP are implemented as modules, but bot/server
-management UI, secure persisted integration configuration, session routing,
-foreground service lifecycle, Telegram approval policies, MCP stdio, and
-streamable-SSE MCP responses are not implemented.
+Telegram and MCP have functional management screens, persisted settings,
+encrypted bot tokens, allowlists, tool inspection, and trust controls.
+Telegram polling operates only while the application process is alive.
+Foreground-service lifecycle, Telegram-specific approval policies, MCP stdio,
+streamable-SSE MCP responses, and automatic MCP-tool registration in the agent
+loop are not implemented.
 
 ## Product functionality
 

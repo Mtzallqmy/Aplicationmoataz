@@ -11,13 +11,20 @@ import ai.alaser.core.model.AgentSession
 import ai.alaser.core.model.AgentState
 import ai.alaser.core.model.ChatMessage
 import ai.alaser.core.model.ProviderConfiguration
+import ai.alaser.core.model.McpServerConfiguration
+import ai.alaser.core.model.TelegramBotConfiguration
 import ai.alaser.core.model.Workspace
+import ai.alaser.core.sandbox.RootfsInstaller
 import ai.alaser.core.security.AndroidSecretStore
 import ai.alaser.core.terminal.ProcessTerminal
+import ai.alaser.integration.mcp.McpHttpClient
+import ai.alaser.integration.telegram.TelegramClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.net.URI
 import java.util.UUID
@@ -25,15 +32,23 @@ import java.util.UUID
 class AlaserRepository(context: Context) {
     private val database = AlaserDatabase(context)
     private val secrets = AndroidSecretStore(context)
+    private val preferences = context.getSharedPreferences("alaser_integrations", Context.MODE_PRIVATE)
+    private val json = Json { ignoreUnknownKeys = true }
     private val workspacesDirectory = File(context.filesDir, "workspaces").apply { mkdirs() }
+    private val environmentsDirectory = File(context.filesDir, "linux-environments").apply { mkdirs() }
 
     val terminal = ProcessTerminal()
+    val rootfsInstaller = RootfsInstaller(environmentsDirectory)
 
     private val workspacesValue = MutableStateFlow(database.listWorkspaces())
     private val providersValue = MutableStateFlow(database.listProviders())
+    private val telegramBotsValue = MutableStateFlow(readTelegramBots())
+    private val mcpServersValue = MutableStateFlow(readMcpServers())
 
     val workspaces: StateFlow<List<Workspace>> = workspacesValue
     val providers: StateFlow<List<ProviderConfiguration>> = providersValue
+    val telegramBots: StateFlow<List<TelegramBotConfiguration>> = telegramBotsValue
+    val mcpServers: StateFlow<List<McpServerConfiguration>> = mcpServersValue
 
     suspend fun createWorkspace(name: String): Workspace = withContext(Dispatchers.IO) {
         val safeName = name.trim()
@@ -121,6 +136,106 @@ class AlaserRepository(context: Context) {
 
     suspend fun files(workspace: Workspace, path: String = "."): List<WorkspaceFileEntry> =
         filesystem(workspace).list(path)
+
+    suspend fun saveTelegramBot(
+        name: String,
+        token: String,
+        workspace: Workspace,
+        allowedUserIds: String,
+        allowedChatIds: String,
+    ): TelegramBotConfiguration = withContext(Dispatchers.IO) {
+        require(name.isNotBlank()) { "A bot name is required." }
+        require(token.matches(Regex("""[0-9]+:[A-Za-z0-9_-]{20,}"""))) {
+            "The Telegram bot token has an invalid format."
+        }
+        val users = parseIdentifiers(allowedUserIds, required = true)
+        val chats = parseIdentifiers(allowedChatIds, required = false)
+        val id = UUID.randomUUID().toString()
+        val secretId = "telegram." + id
+        secrets.put(secretId, token.trim())
+        val bot = TelegramBotConfiguration(
+            id = id,
+            name = name.trim(),
+            tokenSecretId = secretId,
+            workspaceId = workspace.id,
+            allowedUserIds = users,
+            allowedChatIds = chats,
+        )
+        persistTelegramBots(telegramBotsValue.value + bot)
+        bot
+    }
+
+    suspend fun updateTelegramBot(configuration: TelegramBotConfiguration) = withContext(Dispatchers.IO) {
+        persistTelegramBots(telegramBotsValue.value.map { if (it.id == configuration.id) configuration else it })
+    }
+
+    fun telegramClient(configuration: TelegramBotConfiguration): TelegramClient =
+        TelegramClient(
+            token = {
+                secrets.get(configuration.tokenSecretId)
+                    ?: error("The encrypted Telegram bot token is unavailable.")
+            },
+        )
+
+    suspend fun saveMcpServer(name: String, endpoint: String): McpServerConfiguration =
+        withContext(Dispatchers.IO) {
+            require(name.isNotBlank()) { "An MCP server name is required." }
+            validateProviderUrl(endpoint)
+            val server = McpServerConfiguration(
+                id = UUID.randomUUID().toString(),
+                name = name.trim(),
+                endpoint = endpoint.trim(),
+                enabled = true,
+                trusted = false,
+            )
+            persistMcpServers(mcpServersValue.value + server)
+            server
+        }
+
+    suspend fun updateMcpServer(configuration: McpServerConfiguration) = withContext(Dispatchers.IO) {
+        persistMcpServers(mcpServersValue.value.map { if (it.id == configuration.id) configuration else it })
+    }
+
+    fun mcpClient(configuration: McpServerConfiguration): McpHttpClient =
+        McpHttpClient(configuration)
+
+    fun linuxEnvironments(): List<File> =
+        environmentsDirectory.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }.orEmpty()
+
+    private fun readTelegramBots(): List<TelegramBotConfiguration> =
+        preferences.getString("telegram_bots", null)
+            ?.let { runCatching { json.decodeFromString<List<TelegramBotConfiguration>>(it) }.getOrDefault(emptyList()) }
+            .orEmpty()
+
+    private fun readMcpServers(): List<McpServerConfiguration> =
+        preferences.getString("mcp_servers", null)
+            ?.let { runCatching { json.decodeFromString<List<McpServerConfiguration>>(it) }.getOrDefault(emptyList()) }
+            .orEmpty()
+
+    private fun persistTelegramBots(value: List<TelegramBotConfiguration>) {
+        check(preferences.edit().putString("telegram_bots", json.encodeToString(value)).commit()) {
+            "Telegram bot settings could not be saved."
+        }
+        telegramBotsValue.value = value
+    }
+
+    private fun persistMcpServers(value: List<McpServerConfiguration>) {
+        check(preferences.edit().putString("mcp_servers", json.encodeToString(value)).commit()) {
+            "MCP server settings could not be saved."
+        }
+        mcpServersValue.value = value
+    }
+
+    private fun parseIdentifiers(value: String, required: Boolean): Set<Long> {
+        val identifiers = value.split(',', ' ', '\n')
+            .filter { it.isNotBlank() }
+            .map { it.trim().toLongOrNull() ?: error("Telegram user and chat identifiers must be numeric.") }
+            .toSet()
+        require(!required || identifiers.isNotEmpty()) {
+            "At least one explicitly allowed Telegram user ID is required."
+        }
+        return identifiers
+    }
 
     companion object {
         fun validateProviderUrl(value: String) {

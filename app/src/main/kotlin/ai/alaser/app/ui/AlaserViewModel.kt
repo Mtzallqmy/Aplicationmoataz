@@ -20,14 +20,22 @@ import ai.alaser.core.model.ApprovalDecision
 import ai.alaser.core.model.ChatMessage
 import ai.alaser.core.model.MessagePart
 import ai.alaser.core.model.MessageRole
+import ai.alaser.core.model.McpServerConfiguration
 import ai.alaser.core.model.ProviderConfiguration
+import ai.alaser.core.model.TelegramBotConfiguration
 import ai.alaser.core.model.Workspace
+import ai.alaser.core.sandbox.EnvironmentInstallEvent
+import ai.alaser.core.sandbox.LinuxEnvironmentDescriptor
+import ai.alaser.integration.mcp.McpToolDescription
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -36,6 +44,12 @@ import java.util.UUID
 data class AppUiState(
     val workspaces: List<Workspace> = emptyList(),
     val providers: List<ProviderConfiguration> = emptyList(),
+    val telegramBots: List<TelegramBotConfiguration> = emptyList(),
+    val mcpServers: List<McpServerConfiguration> = emptyList(),
+    val mcpTools: List<McpToolDescription> = emptyList(),
+    val installedEnvironments: List<String> = emptyList(),
+    val integrationStatus: String? = null,
+    val environmentStatus: String? = null,
     val activeWorkspace: Workspace? = null,
     val activeProvider: ProviderConfiguration? = null,
     val activeSession: AgentSession? = null,
@@ -60,6 +74,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     private var agentJob: Job? = null
     private var terminalSession: NativePtySession? = null
     private var terminalReader: Job? = null
+    private val telegramJobs = mutableMapOf<String, Job>()
     private var pendingApproval: CompletableDeferred<ApprovalDecision>? = null
 
     val state: StateFlow<AppUiState> = stateValue.asStateFlow()
@@ -90,6 +105,17 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+        viewModelScope.launch {
+            repository.telegramBots.collect { bots ->
+                stateValue.update { it.copy(telegramBots = bots) }
+            }
+        }
+        viewModelScope.launch {
+            repository.mcpServers.collect { servers ->
+                stateValue.update { it.copy(mcpServers = servers) }
+            }
+        }
+        refreshEnvironments()
     }
 
     fun createWorkspace(name: String) = safely {
@@ -125,6 +151,132 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         stateValue.update { it.copy(providerTest = result) }
     }
 
+    fun saveTelegramBot(
+        name: String,
+        token: String,
+        allowedUsers: String,
+        allowedChats: String,
+    ) = safely {
+        val workspace = stateValue.value.activeWorkspace
+            ?: error("Create and select a project before configuring a Telegram bot.")
+        repository.saveTelegramBot(name, token, workspace, allowedUsers, allowedChats)
+        stateValue.update { it.copy(integrationStatus = "Telegram bot saved with an encrypted token.") }
+    }
+
+    fun testTelegramBot(configuration: TelegramBotConfiguration) = safely {
+        val identity = repository.telegramClient(configuration).testConnection()
+        stateValue.update {
+            it.copy(integrationStatus = "Telegram connected: @" + identity.username + " (" + identity.id + ")")
+        }
+    }
+
+    fun toggleTelegramBot(configuration: TelegramBotConfiguration) = safely {
+        if (telegramJobs[configuration.id]?.isActive == true) {
+            telegramJobs.remove(configuration.id)?.cancel()
+            repository.updateTelegramBot(configuration.copy(enabled = false))
+            stateValue.update { it.copy(integrationStatus = "Telegram polling stopped.") }
+            return@safely
+        }
+
+        require(stateValue.value.activeProvider != null) {
+            "Add an AI provider before starting a Telegram agent."
+        }
+        val enabled = configuration.copy(enabled = true)
+        repository.updateTelegramBot(enabled)
+        val client = repository.telegramClient(enabled)
+        stateValue.update { it.copy(integrationStatus = "Telegram long polling started while the app is open.") }
+        telegramJobs[enabled.id] = viewModelScope.launch {
+            runCatching {
+                client.poll(enabled).collect { incoming ->
+                    val workspace = stateValue.value.workspaces.firstOrNull { it.id == enabled.workspaceId }
+                        ?: error("The Telegram bot workspace is no longer available.")
+                    stateValue.update { it.copy(activeWorkspace = workspace) }
+                    val task = incoming.text.removePrefix("/build ").removePrefix("/ask ").trim()
+                    client.sendMessage(incoming.chatId, "Alaser accepted your task and is working on it.")
+                    sendMessage(task)
+                    val outcome = state.map { it.agentState }.filter {
+                        it in setOf(AgentState.COMPLETED, AgentState.FAILED, AgentState.CANCELLED)
+                    }.first()
+                    val summary = stateValue.value.messages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                        ?.textContent()
+                        ?.take(3_500)
+                        .orEmpty()
+                    client.sendMessage(
+                        incoming.chatId,
+                        if (outcome == AgentState.COMPLETED) {
+                            summary.ifBlank { "Task completed." }
+                        } else {
+                            "Task ended with status " + outcome.name.lowercase() + "."
+                        },
+                    )
+                }
+            }.onFailure {
+                if (it !is kotlinx.coroutines.CancellationException) {
+                    fail(it.message ?: "Telegram polling failed.")
+                }
+            }
+        }
+    }
+
+    fun saveMcpServer(name: String, endpoint: String) = safely {
+        repository.saveMcpServer(name, endpoint)
+        stateValue.update { it.copy(integrationStatus = "MCP server saved. Trust is disabled by default.") }
+    }
+
+    fun inspectMcpServer(server: McpServerConfiguration) = safely {
+        val client = repository.mcpClient(server)
+        client.initialize()
+        val tools = client.listTools()
+        stateValue.update {
+            it.copy(mcpTools = tools, integrationStatus = server.name + " exposed " + tools.size + " tools.")
+        }
+    }
+
+    fun toggleMcpTrust(server: McpServerConfiguration) = safely {
+        val updated = server.copy(trusted = !server.trusted)
+        repository.updateMcpServer(updated)
+        stateValue.update {
+            it.copy(
+                integrationStatus = if (updated.trusted) {
+                    "MCP tool execution trust granted for " + server.name + "."
+                } else {
+                    "MCP tool execution trust revoked."
+                },
+            )
+        }
+    }
+
+    fun installLinuxEnvironment(name: String, archiveUrl: String, sha256: String) = safely {
+        val identifier = name.trim().lowercase().replace(Regex("[^a-z0-9-]"), "-")
+        require(identifier.isNotBlank()) { "An environment name is required." }
+        val descriptor = LinuxEnvironmentDescriptor(
+            id = identifier,
+            displayName = name.trim(),
+            architecture = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
+            archiveUrl = archiveUrl.trim(),
+            sha256 = sha256.trim(),
+        )
+        repository.rootfsInstaller.install(descriptor).collect { event ->
+            val status = when (event) {
+                is EnvironmentInstallEvent.Downloading -> {
+                    val total = event.totalBytes?.let { " / " + it } ?: ""
+                    "Downloading " + event.downloadedBytes + total + " bytes"
+                }
+                is EnvironmentInstallEvent.Verifying -> "Verifying SHA-256 checksum"
+                is EnvironmentInstallEvent.Extracting -> "Extracted " + event.filesExtracted + " entries"
+                is EnvironmentInstallEvent.Installed -> "Installed " + event.directory.name
+            }
+            stateValue.update { it.copy(environmentStatus = status) }
+            if (event is EnvironmentInstallEvent.Installed) refreshEnvironments()
+        }
+    }
+
+    fun refreshEnvironments() {
+        stateValue.update {
+            it.copy(installedEnvironments = repository.linuxEnvironments().map(File::getName))
+        }
+    }
+
     fun sendMessage(text: String, mode: AgentMode = AgentMode.BUILD) {
         if (agentJob?.isActive == true) return
         val current = stateValue.value
@@ -154,6 +306,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(
                         activeSession = session,
                         messages = it.messages + userMessage,
+                        agentState = AgentState.THINKING,
                         error = null,
                         streamedText = "",
                     )
@@ -324,10 +477,12 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun clearError() {
-        stateValue.update { it.copy(error = null, providerTest = null) }
+        stateValue.update { it.copy(error = null, providerTest = null, integrationStatus = null) }
     }
 
     override fun onCleared() {
+        telegramJobs.values.forEach { it.cancel() }
+        telegramJobs.clear()
         stopInteractiveTerminal()
         repository.terminal.close()
         super.onCleared()
