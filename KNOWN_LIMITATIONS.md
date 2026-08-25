@@ -1,24 +1,21 @@
 # Known limitations
 
-## Build verification
+## Build environment
 
-No APK was produced in the current authoring environment. It lacks a standalone
-javac executable, Gradle, Android SDK, Kotlin compiler, Rust compiler, and
-Android emulator. Java source-launcher compiler modules are available only for
-small Java contract checks. Gradle wrapper properties are present, but
-gradle-wrapper.jar must be generated on a machine where Gradle 8.10.2 is
-available.
+Android compilation, unit tests, lint, and APK generation are performed by
+GitHub Actions because the local authoring sandbox does not include an Android
+SDK or Gradle. The wrapper properties are present, but gradle-wrapper.jar is
+not checked in; CI provisions Gradle 8.10.2 directly.
 
-The Kotlin and Android source has not been compiled in this environment.
-Until GitHub Actions or a correctly provisioned development machine executes
-the build, compilation and runtime correctness remain unverified.
+No physical Android device or emulator is available in the current session, so
+installation and interactive device behavior cannot be directly exercised.
 
 ## Terminal
 
-The terminal executes actual shell commands, but its backend uses ordinary
-stdin/stdout/stderr pipes. It is not an actual PTY. ANSI terminal emulation,
-alternate-screen applications, PTY resize, special-key handling, shell tabs,
-and persistent interactive Compose terminal sessions are not complete.
+The application includes a genuine NDK/JNI interactive pseudo-terminal and
+basic control keys. Agent tool commands still use process pipes rather than
+sharing the interactive PTY. ANSI rendering, alternate-screen display, full
+special-key handling, shell tabs, and terminal emulation are not complete.
 
 ## Linux sandbox
 

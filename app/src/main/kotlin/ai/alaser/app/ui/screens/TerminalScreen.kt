@@ -12,6 +12,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -26,7 +27,13 @@ import ai.alaser.app.ui.AppUiState
 import ai.alaser.app.ui.theme.AlaserCodeTextStyle
 
 @Composable
-fun TerminalScreen(state: AppUiState, onRun: (String) -> Unit) {
+fun TerminalScreen(
+    state: AppUiState,
+    onRun: (String) -> Unit,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onControl: (Int) -> Unit,
+) {
     var command by remember { mutableStateOf("") }
     Column(
         Modifier.fillMaxSize().padding(14.dp),
@@ -37,9 +44,25 @@ fun TerminalScreen(state: AppUiState, onRun: (String) -> Unit) {
             color = MaterialTheme.colorScheme.secondary,
         )
         Text(
-            "Current backend: system shell via process pipes. Native PTY is not bundled.",
+            if (state.terminalInteractive) {
+                "Interactive PTY active · /system/bin/sh · xterm-256color"
+            } else {
+                "Start a real interactive pseudo-terminal or run individual shell commands."
+            },
             style = MaterialTheme.typography.bodyMedium,
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (state.terminalInteractive) {
+                TextButton(onClick = onStop) { Text("Stop PTY") }
+                TextButton(onClick = { onControl(3) }) { Text("CTRL+C") }
+                TextButton(onClick = { onControl(9) }) { Text("TAB") }
+                TextButton(onClick = { onControl(27) }) { Text("ESC") }
+            } else {
+                Button(onClick = onStart, enabled = state.activeWorkspace != null) {
+                    Text("Start interactive PTY")
+                }
+            }
+        }
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Text(
                 text = state.terminalOutput.ifBlank { "$ " },

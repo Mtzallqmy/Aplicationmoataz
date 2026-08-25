@@ -3,3 +3,6 @@
 -keepclassmembers class ** {
     *** Companion;
 }
+-keep class ai.alaser.app.terminal.NativePtyBridge {
+    native <methods>;
+}

@@ -45,7 +45,7 @@ fun SettingsScreen(
             InformationCard("Privacy", "Local-first storage · telemetry disabled · provider requests are direct")
         }
         item {
-            InformationCard("Sandbox", "Native shell available. PRoot requires a separately audited executable.")
+            InformationCard("Sandbox", "Native interactive PTY available. PRoot requires a separately audited executable.")
         }
         item {
             InformationCard("Telegram", "Long-polling client is implemented as an integration module; settings UI is pending.")

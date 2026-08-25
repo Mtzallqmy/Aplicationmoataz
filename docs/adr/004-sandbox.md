@@ -2,7 +2,9 @@
 
 Status: accepted.
 
-The initial shell starts actual operating-system processes but is not a PTY.
-Rootfs installation and PRoot invocation are separate capabilities. Do not
-bundle GPL-covered upstream artifacts without a deliberate licensing decision,
-and do not present any unverified PRoot execution as a completed sandbox.
+The application owns a small original Android NDK/JNI PTY implementation for
+interactive shell sessions. Agent command execution remains independently
+process-backed. Rootfs installation and PRoot invocation are separate
+capabilities. Do not bundle GPL-covered upstream artifacts without a deliberate
+licensing decision, and do not present unverified PRoot execution as a
+completed sandbox.

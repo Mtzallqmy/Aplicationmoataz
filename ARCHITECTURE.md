@@ -31,10 +31,14 @@ framework, cloud SDK, or opaque service locator.
 
 ## Terminal distinction
 
-ProcessTerminal executes real operating-system processes and can maintain a
-stdin/stdout/stderr session. It is not a pseudoterminal. Alternate screens,
-terminal resize, raw-mode programs, and terminal emulation require a future
-audited native PTY implementation and terminal renderer.
+NativePtySession creates a real pseudoterminal through a project-owned JNI/C
+implementation using posix_openpt, grantpt, unlockpt, fork, setsid,
+TIOCSCTTY, and terminal-size ioctls. Compose can start a persistent interactive
+shell, write user input, and send control characters.
+
+ProcessTerminal remains a separate ordinary process-pipe executor for agent
+commands. Full ANSI terminal rendering and alternate-screen emulation are not
+yet implemented.
 
 ## Linux distinction
 

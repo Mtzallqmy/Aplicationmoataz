@@ -141,7 +141,13 @@ private fun AlaserNavigation(
             )
         }
         composable("terminal") {
-            TerminalScreen(state, viewModel::runTerminalCommand)
+            TerminalScreen(
+                state = state,
+                onRun = viewModel::runTerminalCommand,
+                onStart = viewModel::startInteractiveTerminal,
+                onStop = viewModel::stopInteractiveTerminal,
+                onControl = viewModel::sendTerminalControl,
+            )
         }
         composable("settings") {
             SettingsScreen(

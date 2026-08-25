@@ -214,10 +214,10 @@ def verify_security_contracts(root: Path) -> None:
     require_contains(
         root,
         "KNOWN_LIMITATIONS.md",
-        "No APK was produced",
-        "not an actual PTY",
+        "GitHub Actions",
+        "Agent tool commands still use process pipes",
         "does not ship PRoot",
-        "has not been compiled",
+        "No physical Android device or emulator",
     )
 
 

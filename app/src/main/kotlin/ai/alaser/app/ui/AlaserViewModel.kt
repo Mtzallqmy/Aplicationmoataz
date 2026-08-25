@@ -11,6 +11,7 @@ import ai.alaser.agent.runtime.ApprovalRequest
 import ai.alaser.agent.runtime.ToolRegistry
 import ai.alaser.ai.providers.ProviderConnectionResult
 import ai.alaser.app.AlaserApplication
+import ai.alaser.app.terminal.NativePtySession
 import ai.alaser.core.filesystem.WorkspaceFileEntry
 import ai.alaser.core.model.AgentMode
 import ai.alaser.core.model.AgentSession
@@ -44,6 +45,7 @@ data class AppUiState(
     val editorPath: String? = null,
     val editorContent: String = "",
     val terminalOutput: String = "",
+    val terminalInteractive: Boolean = false,
     val agentState: AgentState = AgentState.IDLE,
     val agentSummary: String = "",
     val streamedText: String = "",
@@ -56,6 +58,8 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     private val repository = (application as AlaserApplication).repository
     private val stateValue = MutableStateFlow(AppUiState())
     private var agentJob: Job? = null
+    private var terminalSession: NativePtySession? = null
+    private var terminalReader: Job? = null
     private var pendingApproval: CompletableDeferred<ApprovalDecision>? = null
 
     val state: StateFlow<AppUiState> = stateValue.asStateFlow()
@@ -282,10 +286,41 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun runTerminalCommand(command: String) = safely {
+        terminalSession?.takeIf { it.running.value }?.let { session ->
+            session.write(command + "\n")
+            return@safely
+        }
         val workspace = stateValue.value.activeWorkspace ?: return@safely
         val output = repository.terminal.execute(command, File(workspace.rootPath), timeoutSeconds = 120)
         val block = "$ " + command + "\n" + output.stdout + output.stderr + "[exit " + output.exitCode + "]\n"
         stateValue.update { it.copy(terminalOutput = (it.terminalOutput + block).takeLast(150_000)) }
+    }
+
+    fun startInteractiveTerminal() = safely {
+        val workspace = stateValue.value.activeWorkspace ?: return@safely
+        stopInteractiveTerminal()
+        val session = NativePtySession.open(File(workspace.rootPath))
+        terminalSession = session
+        stateValue.update { it.copy(terminalInteractive = true) }
+        terminalReader = viewModelScope.launch {
+            session.output.collect { output ->
+                stateValue.update {
+                    it.copy(terminalOutput = (it.terminalOutput + output).takeLast(150_000))
+                }
+            }
+        }
+    }
+
+    fun sendTerminalControl(code: Int) = safely {
+        terminalSession?.control(code)
+    }
+
+    fun stopInteractiveTerminal() {
+        terminalReader?.cancel()
+        terminalReader = null
+        terminalSession?.close()
+        terminalSession = null
+        stateValue.update { it.copy(terminalInteractive = false) }
     }
 
     fun clearError() {
@@ -293,6 +328,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        stopInteractiveTerminal()
         repository.terminal.close()
         super.onCleared()
     }

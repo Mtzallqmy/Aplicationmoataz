@@ -16,7 +16,9 @@ https://github.com/Mtzallqmy/Aplicationmoataz.
   escaping-symlink, binary-file, and ZIP-slip protections.
 - Persistent projects, sessions, messages, and provider metadata in SQLite.
 - AES-256-GCM provider-secret encryption with Android Keystore.
-- A process-backed shell, cancellable commands, and bounded UI output.
+- A real Android NDK/JNI pseudo-terminal with interactive shell I/O, terminal
+  resize support, CTRL+C/TAB/ESC controls, and ARM64/x86_64 native builds.
+- A separate process-backed command executor for agent tool calls.
 - A checksum-verified root filesystem installer and a PRoot backend that works
   only when a compatible executable and valid root filesystem are supplied.
 - Deny-by-default Telegram long-polling and an explicitly trusted MCP HTTP
@@ -30,6 +32,7 @@ been completed. Read KNOWN_LIMITATIONS.md before evaluating the project.
 
 - Full JDK 17, including javac.
 - Android SDK platform 35 and compatible Android build tools.
+- Android NDK and CMake for the native pseudo-terminal.
 - Gradle 8.10.2.
 - Network access to Google Maven, Maven Central, and the Gradle distribution.
 
@@ -45,10 +48,9 @@ When the Android build succeeds, the debug APK is located at:
 
     app/build/outputs/apk/debug/app-debug.apk
 
-The current authoring environment has no Android SDK, standalone javac
-executable, Gradle, Kotlin compiler, or Rust toolchain. Its Java source launcher
-can compile small Java-only security checks, but no Android APK or compiled
-Kotlin/JUnit result has been produced in that environment.
+The checked-in GitHub Actions workflow provisions the required Android build
+environment, builds an installable signed debug APK, runs unit tests and lint,
+and uploads the APK as a downloadable workflow artifact.
 
 ## First functional flow
 
