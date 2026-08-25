@@ -35,16 +35,20 @@ tar.gz archives, but are not bundled. tar.xz and OCI layers are unsupported.
 
 Telegram and MCP have functional management screens, persisted settings,
 encrypted bot tokens, allowlists, tool inspection, and trust controls.
-Telegram polling operates only while the application process is alive.
-Foreground-service lifecycle, Telegram-specific approval policies, MCP stdio,
+Agent work and Telegram polling use a visible Android foreground service while
+the application process is alive; they cannot survive Android process death or
+restore jobs after reboot. Telegram-specific approval policies, MCP stdio,
 streamable-SSE MCP responses, and automatic MCP-tool registration in the agent
 loop are not implemented.
 
 ## Product functionality
 
 The editor is a real editable text field but has no syntax highlighting, line
-numbers, undo history, diff UI, or language-server integration. Project import,
-Storage Access Framework, clone, commit, push, checkpoints, context compaction,
+numbers, undo history, diff UI, or language-server integration. ZIP project
+import uses Android's Storage Access Framework; Git status, diff, history,
+branches, initialization, staging, commits, pull, and explicitly confirmed
+push are available when Git is installed. Importing arbitrary directory trees,
+repository clone, checkpoints, context compaction,
 local models, notifications, crash recovery, optional cloud adapters, cloud
 deployment, and full Arabic UI translation are not implemented.
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -50,6 +51,24 @@ fun ProvidersScreen(
                 "Keys are encrypted using Android Keystore. Requests go directly to your selected provider.",
                 style = MaterialTheme.typography.bodyMedium,
             )
+        }
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val presets = listOf(
+                    "OpenAI" to "https://api.openai.com/v1",
+                    "OpenRouter" to "https://openrouter.ai/api/v1",
+                    "Groq" to "https://api.groq.com/openai/v1",
+                    "DeepSeek" to "https://api.deepseek.com/v1",
+                    "Mistral" to "https://api.mistral.ai/v1",
+                    "Together" to "https://api.together.xyz/v1",
+                    "Cerebras" to "https://api.cerebras.ai/v1",
+                )
+                items(presets, key = { it.first }) { preset ->
+                    TextButton(onClick = { name = preset.first; baseUrl = preset.second }) {
+                        Text(preset.first)
+                    }
+                }
+            }
         }
         item {
             OutlinedTextField(

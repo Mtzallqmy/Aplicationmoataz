@@ -24,6 +24,9 @@ class ToolRegistry(
     val tools: List<ToolDescriptor> = listOf(
         descriptor("read_file", "Read a UTF-8 text file inside the active workspace.", RiskLevel.SAFE, "path"),
         descriptor("write_file", "Create or replace a UTF-8 file inside the active workspace.", RiskLevel.WRITE, "path", "content"),
+        descriptor("replace_text", "Replace matching text in an existing workspace file.", RiskLevel.WRITE, "path", "old_text", "new_text"),
+        descriptor("move_file", "Rename or move a file within the active workspace.", RiskLevel.WRITE, "source", "destination"),
+        descriptor("copy_file", "Copy a regular file within the active workspace.", RiskLevel.WRITE, "source", "destination"),
         descriptor("list_directory", "List files and folders inside the active workspace.", RiskLevel.SAFE, "path"),
         descriptor("create_directory", "Create a directory inside the active workspace.", RiskLevel.WRITE, "path"),
         descriptor("delete_file", "Delete one empty directory or one file inside the active workspace.", RiskLevel.DANGEROUS, "path"),
@@ -31,6 +34,8 @@ class ToolRegistry(
         descriptor("shell_exec", "Execute a shell command with the active workspace as its working directory.", RiskLevel.DANGEROUS, "command"),
         descriptor("git_status", "Read the short Git working-tree status.", RiskLevel.SAFE),
         descriptor("git_diff", "Read the Git diff for the active workspace.", RiskLevel.SAFE),
+        descriptor("git_log", "Read the latest Git commit history.", RiskLevel.SAFE),
+        descriptor("git_branch", "Read Git branches in the current workspace.", RiskLevel.SAFE),
     )
 
     fun assess(invocation: ToolInvocation): RiskLevel {
@@ -54,6 +59,28 @@ class ToolRegistry(
                 )
                 result(invocation, "Saved " + entry.path + " (" + entry.size + " bytes).")
             }
+            "replace_text" -> result(
+                invocation,
+                "Updated " + filesystem.replaceText(
+                    requireArgument(invocation.arguments, "path"),
+                    requireArgument(invocation.arguments, "old_text"),
+                    requireArgument(invocation.arguments, "new_text"),
+                ).path,
+            )
+            "move_file" -> result(
+                invocation,
+                "Moved to " + filesystem.move(
+                    requireArgument(invocation.arguments, "source"),
+                    requireArgument(invocation.arguments, "destination"),
+                ).path,
+            )
+            "copy_file" -> result(
+                invocation,
+                "Copied to " + filesystem.copy(
+                    requireArgument(invocation.arguments, "source"),
+                    requireArgument(invocation.arguments, "destination"),
+                ).path,
+            )
             "list_directory" -> result(
                 invocation,
                 filesystem.list(optionalArgument(invocation.arguments, "path") ?: ".")
@@ -74,6 +101,8 @@ class ToolRegistry(
             "shell_exec" -> command(invocation, requireArgument(invocation.arguments, "command"))
             "git_status" -> command(invocation, "git status --short")
             "git_diff" -> command(invocation, "git diff --no-ext-diff")
+            "git_log" -> command(invocation, "git log --oneline -30")
+            "git_branch" -> command(invocation, "git branch --all --no-color")
             else -> error("Unknown tool: " + invocation.name)
         }
     } catch (exception: Exception) {

@@ -11,6 +11,7 @@ import ai.alaser.agent.runtime.ApprovalRequest
 import ai.alaser.agent.runtime.ToolRegistry
 import ai.alaser.ai.providers.ProviderConnectionResult
 import ai.alaser.app.AlaserApplication
+import ai.alaser.app.service.AgentForegroundService
 import ai.alaser.app.terminal.NativePtySession
 import ai.alaser.core.filesystem.WorkspaceFileEntry
 import ai.alaser.core.model.AgentMode
@@ -60,6 +61,7 @@ data class AppUiState(
     val editorPath: String? = null,
     val editorContent: String = "",
     val terminalOutput: String = "",
+    val gitOutput: String = "",
     val terminalInteractive: Boolean = false,
     val agentState: AgentState = AgentState.IDLE,
     val agentSummary: String = "",
@@ -133,6 +135,23 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         loadFiles()
     }
 
+    fun importWorkspace(uri: android.net.Uri) = safely {
+        val resolver = getApplication<Application>().contentResolver
+        val displayName = resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            ?.removeSuffix(".zip")
+            ?.take(120)
+            ?.ifBlank { "Imported project" }
+            ?: "Imported project"
+        val workspace = requireNotNull(resolver.openInputStream(uri)) {
+            "The selected project archive could not be opened."
+        }.use { input -> repository.importWorkspaceArchive(displayName, input) }
+        stateValue.update {
+            it.copy(activeWorkspace = workspace, activeEnvironment = null, currentDirectory = ".")
+        }
+        loadFiles()
+    }
+
     fun selectWorkspace(workspace: Workspace) = safely {
         stateValue.update {
             it.copy(
@@ -194,7 +213,12 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         val enabled = configuration.copy(enabled = true)
         repository.updateTelegramBot(enabled)
         val client = repository.telegramClient(enabled)
-        stateValue.update { it.copy(integrationStatus = "Telegram long polling started while the app is open.") }
+        AgentForegroundService.start(
+            getApplication(),
+            "telegram-" + enabled.id,
+            "Telegram bot " + enabled.name + " is listening for authorized tasks",
+        )
+        stateValue.update { it.copy(integrationStatus = "Telegram long polling started with a foreground notification.") }
         telegramJobs[enabled.id] = viewModelScope.launch {
             runCatching {
                 client.poll(enabled).collect { incoming ->
@@ -224,6 +248,10 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                 if (it !is kotlinx.coroutines.CancellationException) {
                     fail(it.message ?: "Telegram polling failed.")
                 }
+            }
+        }.also { job ->
+            job.invokeOnCompletion {
+                AgentForegroundService.stop(getApplication(), "telegram-" + enabled.id)
             }
         }
     }
@@ -342,6 +370,11 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
 
         agentJob = viewModelScope.launch {
             runCatching {
+                AgentForegroundService.start(
+                    getApplication(),
+                    "agent",
+                    "Coding agent is working in " + workspace.name,
+                )
                 val session = current.activeSession ?: repository.createSession(
                     workspace = workspace,
                     provider = configuration,
@@ -445,6 +478,10 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                     fail(exception.message ?: "The agent task could not be completed.")
                 }
             }
+        }.also { job ->
+            job.invokeOnCompletion {
+                AgentForegroundService.stop(getApplication(), "agent")
+            }
         }
     }
 
@@ -493,6 +530,25 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         openFile(path)
     }
 
+    fun createDirectory(path: String) = safely {
+        val workspace = stateValue.value.activeWorkspace ?: return@safely
+        repository.filesystem(workspace).createDirectory(path)
+        loadFiles()
+    }
+
+    fun deleteFile(path: String) = safely {
+        val workspace = stateValue.value.activeWorkspace ?: return@safely
+        repository.filesystem(workspace).delete(path)
+        if (stateValue.value.editorPath == path) closeEditor()
+        loadFiles()
+    }
+
+    fun renameFile(source: String, destination: String) = safely {
+        val workspace = stateValue.value.activeWorkspace ?: return@safely
+        repository.filesystem(workspace).move(source, destination)
+        loadFiles()
+    }
+
     fun closeEditor() {
         stateValue.update { it.copy(editorPath = null, editorContent = "") }
     }
@@ -513,6 +569,43 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         val block = "$ " + command + "\n" + output.stdout + output.stderr + "[exit " + output.exitCode + "]\n"
         stateValue.update { it.copy(terminalOutput = (it.terminalOutput + block).takeLast(150_000)) }
     }
+
+    fun runGitAction(action: String, message: String = "") = safely {
+        val workspace = stateValue.value.activeWorkspace
+            ?: error("Create or select a project before using Git.")
+        val command = when (action) {
+            "status" -> "git status --short --branch"
+            "diff" -> "git diff --no-ext-diff"
+            "log" -> "git log --oneline -30"
+            "branch" -> "git branch --all --no-color"
+            "init" -> "git init"
+            "stage" -> "git add --all"
+            "commit" -> {
+                require(message.isNotBlank()) { "A commit message is required." }
+                "git commit -m " + shellQuote(message)
+            }
+            "pull" -> "git pull --ff-only"
+            "push" -> "git push"
+            else -> error("Unsupported Git operation.")
+        }
+        val result = repository.terminal.execute(
+            command,
+            File(workspace.rootPath),
+            timeoutSeconds = 180,
+            environment = mapOf("PROOT_TMP_DIR" to repository.sandboxTemporaryDirectory().absolutePath),
+            commandPrefix = repository.sandboxCommand(workspace),
+        )
+        val output = buildString {
+            append("$ ").appendLine(command)
+            append(result.stdout)
+            append(result.stderr)
+            append("[exit ").append(result.exitCode).appendLine("]")
+        }
+        stateValue.update { it.copy(gitOutput = output.takeLast(150_000)) }
+        loadFiles()
+    }
+
+    private fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
 
     fun startInteractiveTerminal() = safely {
         val workspace = stateValue.value.activeWorkspace ?: return@safely

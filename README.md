@@ -13,7 +13,8 @@ https://github.com/Mtzallqmy/Aplicationmoataz.
 - An iterative agent loop with explicit states, file tools, command tools,
   Git status/diff, command-risk classification, and interactive approvals.
 - Workspace-scoped file access with parent-traversal, sensitive-file,
-  escaping-symlink, binary-file, and ZIP-slip protections.
+  escaping-symlink, binary-file, and ZIP-slip protections, real file/folder
+  creation, rename/move, copy, editing, deletion confirmation, and ZIP project import.
 - Persistent projects, sessions, messages, and provider metadata in SQLite.
 - AES-256-GCM provider-secret encryption with Android Keystore.
 - A real Android NDK/JNI pseudo-terminal with interactive shell I/O, terminal
@@ -25,7 +26,7 @@ https://github.com/Mtzallqmy/Aplicationmoataz.
 - Per-workspace Linux environment selection shared by the interactive PTY and
   the coding agent's actual shell/Git tool execution.
 - User-configurable Telegram bots with encrypted tokens, mandatory user
-  allowlists, connection testing, local long polling, and agent task routing.
+  allowlists, connection testing, foreground-service long polling, and agent task routing.
 - User-configurable MCP HTTP servers with tool inspection and explicit trust.
 - A Linux rootfs settings screen with HTTPS download, mandatory SHA-256
   verification, extraction progress, and installed-environment inventory.

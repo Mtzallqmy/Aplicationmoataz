@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +38,9 @@ fun FilesScreen(
     onOpenDirectory: (String) -> Unit,
     onOpenFile: (String) -> Unit,
     onCreateFile: (String) -> Unit,
+    onCreateDirectory: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onRename: (String, String) -> Unit,
     onEditorChanged: (String) -> Unit,
     onSaveEditor: () -> Unit,
     onCloseEditor: () -> Unit,
@@ -64,6 +68,41 @@ fun FilesScreen(
     }
 
     var newPath by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<String?>(null) }
+    var pendingRename by remember { mutableStateOf<String?>(null) }
+    var renameTarget by remember { mutableStateOf("") }
+
+    pendingDelete?.let { path ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete file or empty folder?") },
+            text = { Text(path) },
+            confirmButton = {
+                TextButton(onClick = { onDelete(path); pendingDelete = null }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
+        )
+    }
+    pendingRename?.let { source ->
+        AlertDialog(
+            onDismissRequest = { pendingRename = null },
+            title = { Text("Rename or move") },
+            text = {
+                OutlinedTextField(
+                    value = renameTarget,
+                    onValueChange = { renameTarget = it },
+                    label = { Text("New workspace-relative path") },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { onRename(source, renameTarget); pendingRename = null },
+                    enabled = renameTarget.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { pendingRename = null }) { Text("Cancel") } },
+        )
+    }
     Column(
         Modifier.fillMaxSize().padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -101,6 +140,14 @@ fun FilesScreen(
                 modifier = Modifier.padding(top = 8.dp),
             ) { Text("Add") }
         }
+        TextButton(
+            enabled = newPath.isNotBlank(),
+            onClick = {
+                val prefix = if (state.currentDirectory == ".") "" else state.currentDirectory + "/"
+                onCreateDirectory(prefix + newPath)
+                newPath = ""
+            },
+        ) { Text("Create folder instead") }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(state.files, key = { it.path }) { entry ->
                 Card(
@@ -119,7 +166,7 @@ fun FilesScreen(
                             contentDescription = if (entry.directory) "Folder" else "File",
                             tint = MaterialTheme.colorScheme.primary,
                         )
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text(entry.name)
                             if (!entry.directory) {
                                 Text(
@@ -128,6 +175,11 @@ fun FilesScreen(
                                 )
                             }
                         }
+                        TextButton(onClick = {
+                            pendingRename = entry.path
+                            renameTarget = entry.path
+                        }) { Text("Rename") }
+                        TextButton(onClick = { pendingDelete = entry.path }) { Text("Delete") }
                     }
                 }
             }

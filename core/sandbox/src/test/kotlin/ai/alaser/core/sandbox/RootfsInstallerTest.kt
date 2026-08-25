@@ -38,6 +38,25 @@ class RootfsInstallerTest {
         assertEquals("Alaser Linux", File(installed.directory, "etc/os-release").readText())
     }
 
+    @Test
+    fun installsOfficialBundledAlpineArchiveWhenAvailable() = runBlocking {
+        val archive = System.getenv("ALASER_BUNDLED_ROOTFS")?.let(::File) ?: return@runBlocking
+        val descriptor = LinuxEnvironmentDescriptor(
+            id = "official-alpine",
+            displayName = "Official Alpine Linux",
+            architecture = "x86_64",
+            archiveUrl = "asset://linux/alpine-x86_64.tar.gz",
+            sha256 = RootfsInstaller.checksum(archive),
+        )
+        val installed = RootfsInstaller(temporary.newFolder("official-environments"))
+            .installBundled(descriptor) { archive.inputStream() }
+            .toList()
+            .last() as EnvironmentInstallEvent.Installed
+
+        assertTrue("The official Linux shell must be executable.", File(installed.directory, "bin/sh").canExecute())
+        assertTrue("The package manager must exist.", File(installed.directory, "sbin/apk").exists())
+    }
+
     private fun rootfsArchive(): ByteArray {
         val output = ByteArrayOutputStream()
         TarArchiveOutputStream(GZIPOutputStream(output)).use { tar ->

@@ -82,6 +82,35 @@ class WorkspaceFileSystem(root: File) {
         Files.deleteIfExists(resolved)
     }
 
+    suspend fun move(source: String, destination: String): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        val original = resolve(source)
+        val target = resolve(destination)
+        require(original != rootPath && target != rootPath) { "The workspace root cannot be moved." }
+        require(!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) { "The destination already exists." }
+        Files.createDirectories(target.parent)
+        validateExistingAncestors(target)
+        Files.move(original, target)
+        entry(target)
+    }
+
+    suspend fun copy(source: String, destination: String): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        val original = resolve(source)
+        val target = resolve(destination)
+        require(Files.isRegularFile(original, LinkOption.NOFOLLOW_LINKS)) { "Only regular files can be copied." }
+        require(!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) { "The destination already exists." }
+        Files.createDirectories(target.parent)
+        validateExistingAncestors(target)
+        Files.copy(original, target)
+        entry(target)
+    }
+
+    suspend fun replaceText(path: String, oldText: String, newText: String): WorkspaceFileEntry {
+        require(oldText.isNotEmpty()) { "Replacement search text cannot be empty." }
+        val original = readText(path)
+        require(original.contains(oldText)) { "The requested text was not found in the file." }
+        return writeText(path, original.replace(oldText, newText))
+    }
+
     suspend fun search(query: String, limit: Int = 100): List<WorkspaceFileEntry> = withContext(Dispatchers.IO) {
         require(query.isNotBlank()) { "A search term is required." }
         Files.walk(rootPath).use { stream ->

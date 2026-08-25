@@ -1,5 +1,7 @@
 package ai.alaser.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,10 +32,14 @@ import ai.alaser.core.model.Workspace
 fun ProjectsScreen(
     state: AppUiState,
     onCreate: (String) -> Unit,
+    onImport: (android.net.Uri) -> Unit,
     onSelect: (Workspace) -> Unit,
     onOpenFiles: () -> Unit,
 ) {
     var projectName by remember { mutableStateOf("") }
+    val archivePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onImport(uri)
+    }
     Column(
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -58,6 +64,9 @@ fun ProjectsScreen(
                 enabled = projectName.isNotBlank(),
                 modifier = Modifier.padding(top = 8.dp),
             ) { Text("Create") }
+        }
+        TextButton(onClick = { archivePicker.launch(arrayOf("application/zip", "application/octet-stream")) }) {
+            Text("Import project ZIP from device")
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -19,6 +19,7 @@ fun SettingsScreen(
     state: AppUiState,
     onOpenProviders: () -> Unit,
     onOpenFiles: () -> Unit,
+    onOpenGit: () -> Unit,
     onOpenTelegram: () -> Unit,
     onOpenMcp: () -> Unit,
     onOpenEnvironments: () -> Unit,
@@ -41,6 +42,13 @@ fun SettingsScreen(
                     title = "Workspace Files",
                     detail = state.activeWorkspace.name,
                     onClick = onOpenFiles,
+                )
+            }
+            item {
+                SettingsCard(
+                    title = "Git and Changes",
+                    detail = "Status, diff, history, branches, commits, pull, and confirmed push",
+                    onClick = onOpenGit,
                 )
             }
         }

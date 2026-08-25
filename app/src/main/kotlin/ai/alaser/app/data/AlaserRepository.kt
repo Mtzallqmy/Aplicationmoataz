@@ -68,6 +68,19 @@ class AlaserRepository(context: Context) {
         }
     }
 
+    suspend fun importWorkspaceArchive(name: String, source: java.io.InputStream): Workspace =
+        withContext(Dispatchers.IO) {
+            val archive = File.createTempFile("alaser-project-", ".zip", applicationContext.cacheDir)
+            try {
+                archive.outputStream().buffered().use { output -> source.copyTo(output) }
+                val workspace = createWorkspace(name)
+                WorkspaceFileSystem(File(workspace.rootPath)).extractZip(archive, ".")
+                workspace
+            } finally {
+                archive.delete()
+            }
+        }
+
     suspend fun saveProvider(
         name: String,
         baseUrl: String,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -55,6 +56,7 @@ fun ChatScreen(
     onOpenFiles: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
+    var selectedMode by remember { mutableStateOf(AgentMode.BUILD) }
     val active = state.agentState !in setOf(
         AgentState.IDLE,
         AgentState.COMPLETED,
@@ -75,6 +77,18 @@ fun ChatScreen(
             )
             IconButton(onClick = onOpenFiles, enabled = state.activeWorkspace != null) {
                 Icon(Icons.Outlined.FolderOpen, contentDescription = "Open workspace files")
+            }
+        }
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(AgentMode.entries, key = { it.name }) { mode ->
+                TextButton(onClick = { selectedMode = mode }, enabled = !active) {
+                    val label = mode.name.lowercase().replace('_', ' ')
+                    Text(if (selectedMode == mode) "• " + label else label)
+                }
             }
         }
 
@@ -158,7 +172,7 @@ fun ChatScreen(
                     if (active) {
                         onStop()
                     } else {
-                        onSend(draft, AgentMode.BUILD)
+                        onSend(draft, selectedMode)
                         draft = ""
                     }
                 },

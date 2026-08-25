@@ -52,6 +52,26 @@ class WorkspaceFileSystemTest {
     }
 
     @Test
+    fun copiesMovesAndReplacesFilesWithinWorkspace() = runBlocking {
+        val filesystem = WorkspaceFileSystem(temporary.newFolder("managed-workspace"))
+        filesystem.writeText("src/input.txt", "hello original")
+        filesystem.copy("src/input.txt", "copies/output.txt")
+        filesystem.move("copies/output.txt", "renamed/output.txt")
+        filesystem.replaceText("renamed/output.txt", "original", "updated")
+        assertEquals("hello updated", filesystem.readText("renamed/output.txt"))
+    }
+
+    @Test
+    fun preventsMoveOutsideWorkspace() = runBlocking {
+        val filesystem = WorkspaceFileSystem(temporary.newFolder("restricted-workspace"))
+        filesystem.writeText("safe.txt", "private")
+        runCatching { filesystem.move("safe.txt", "../escaped.txt") }
+            .onSuccess { error("Moving outside the workspace should fail.") }
+            .onFailure { assertTrue(it is WorkspaceAccessException) }
+        Unit
+    }
+
+    @Test
     fun blocksZipSlipEntries() = runBlocking {
         val root = temporary.newFolder("workspace")
         val archive = temporary.newFile("escape.zip")

@@ -31,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ai.alaser.app.ui.screens.ChatScreen
 import ai.alaser.app.ui.screens.FilesScreen
+import ai.alaser.app.ui.screens.GitScreen
 import ai.alaser.app.ui.screens.LinuxEnvironmentsScreen
 import ai.alaser.app.ui.screens.McpScreen
 import ai.alaser.app.ui.screens.ProjectsScreen
@@ -69,6 +70,7 @@ fun AlaserApp(viewModel: AlaserViewModel = viewModel()) {
                             "settings" -> "Settings"
                             "providers" -> "AI Providers"
                             "files" -> "Workspace Files"
+                            "git" -> "Git and Changes"
                             "telegram" -> "Telegram Bots"
                             "mcp" -> "MCP Servers"
                             "environments" -> "Linux Environments"
@@ -139,6 +141,7 @@ private fun AlaserNavigation(
             ProjectsScreen(
                 state = state,
                 onCreate = viewModel::createWorkspace,
+                onImport = viewModel::importWorkspace,
                 onSelect = {
                     viewModel.selectWorkspace(it)
                     controller.navigate("chat")
@@ -160,6 +163,7 @@ private fun AlaserNavigation(
                 state = state,
                 onOpenProviders = { controller.navigate("providers") },
                 onOpenFiles = { controller.navigate("files") },
+                onOpenGit = { controller.navigate("git") },
                 onOpenTelegram = { controller.navigate("telegram") },
                 onOpenMcp = { controller.navigate("mcp") },
                 onOpenEnvironments = { controller.navigate("environments") },
@@ -180,10 +184,16 @@ private fun AlaserNavigation(
                 onOpenDirectory = viewModel::loadFiles,
                 onOpenFile = viewModel::openFile,
                 onCreateFile = viewModel::createFile,
+                onCreateDirectory = viewModel::createDirectory,
+                onDelete = viewModel::deleteFile,
+                onRename = viewModel::renameFile,
                 onEditorChanged = viewModel::updateEditor,
                 onSaveEditor = viewModel::saveEditor,
                 onCloseEditor = viewModel::closeEditor,
             )
+        }
+        composable("git") {
+            GitScreen(state = state, onAction = viewModel::runGitAction)
         }
         composable("telegram") {
             TelegramScreen(
