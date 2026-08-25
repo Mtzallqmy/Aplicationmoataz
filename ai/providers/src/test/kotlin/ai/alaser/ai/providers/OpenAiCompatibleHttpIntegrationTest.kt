@@ -42,12 +42,14 @@ class OpenAiCompatibleHttpIntegrationTest {
             exchange.sendResponseHeaders(if (authenticated) 200 else 401, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }
+        registerSuccessfulGeneration()
 
         val connection = provider().testConnection()
 
         assertTrue(connection.success)
         assertEquals(200, connection.statusCode)
         assertEquals(listOf("a-model", "z-model"), connection.models.map { it.id })
+        assertTrue(connection.detail.orEmpty().contains("real streaming generation"))
     }
 
     @Test
@@ -120,4 +122,18 @@ class OpenAiCompatibleHttpIntegrationTest {
         ),
         apiKey = { "real-test-key" },
     )
+
+    private fun registerSuccessfulGeneration() {
+        server.createContext("/v1/chat/completions") { exchange ->
+            val authenticated = exchange.requestHeaders.getFirst("Authorization") == "Bearer real-test-key"
+            val bytes = if (authenticated) {
+                "data: {\"choices\":[{\"delta\":{\"content\":\"OK\"}}]}\n\ndata: [DONE]\n\n".toByteArray()
+            } else {
+                "{\"error\":{\"message\":\"Invalid API credential\"}}".toByteArray()
+            }
+            exchange.responseHeaders.add("Content-Type", "text/event-stream")
+            exchange.sendResponseHeaders(if (authenticated) 200 else 401, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+    }
 }

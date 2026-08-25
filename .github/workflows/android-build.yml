@@ -20,9 +20,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+      - name: Reject Java APIs unavailable on Android 8
+        run: bash scripts/check-android8-compatibility.sh
       - name: Compile app and verify core modules before preparing Ubuntu
         run: gradle :app:compileDebugKotlin :core:filesystem:test :core:terminal:test :ai:providers:test :agent:runtime:test
-      - name: Enable ARM64 Ubuntu image preparation
+      - name: Enable ARM64 image preparation and execution
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
@@ -36,8 +38,8 @@ jobs:
         run: python3 scripts/verify-apk.py app/build/outputs/apk/debug/app-debug.apk
       - name: Run JVM and Android unit tests
         env:
-          ALASER_BUNDLED_ROOTFS: ${{ github.workspace }}/app/src/main/assets/linux/alpine-x86_64.rootfs
-          ALASER_BUNDLED_UBUNTU: ${{ github.workspace }}/app/src/main/assets/linux/ubuntu-amd64.rootfs
+          ALASER_BUNDLED_ROOTFS: ${{ github.workspace }}/app/src/main/assets/linux/alpine-aarch64.rootfs
+          ALASER_BUNDLED_UBUNTU: ${{ github.workspace }}/app/src/main/assets/linux/ubuntu-arm64.rootfs
         run: gradle test
       - name: Run Android lint
         run: gradle :app:lintDebug

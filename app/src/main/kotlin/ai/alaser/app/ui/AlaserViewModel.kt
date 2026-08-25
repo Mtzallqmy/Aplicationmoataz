@@ -51,6 +51,7 @@ data class AppUiState(
     val mcpTools: List<McpToolDescription> = emptyList(),
     val installedEnvironments: List<String> = emptyList(),
     val activeEnvironment: String? = null,
+    val environmentInstalling: String? = null,
     val integrationStatus: String? = null,
     val environmentStatus: String? = null,
     val activeWorkspace: Workspace? = null,
@@ -78,6 +79,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     private val repository = (application as AlaserApplication).repository
     private val stateValue = MutableStateFlow(AppUiState())
     private var agentJob: Job? = null
+    private var environmentInstallJob: Job? = null
     private var terminalSession: NativePtySession? = null
     private var terminalReader: Job? = null
     private val telegramJobs = mutableMapOf<String, Job>()
@@ -105,11 +107,14 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.providers.collect { providers ->
                 stateValue.update { current ->
+                    val preferredId = repository.selectedProviderId()
                     current.copy(
                         providers = providers,
-                        activeProvider = current.activeProvider?.let { selected ->
-                            providers.firstOrNull { it.id == selected.id }
-                        } ?: providers.firstOrNull(),
+                        activeProvider = providers.firstOrNull { it.id == preferredId }
+                            ?: current.activeProvider?.let { selected ->
+                                providers.firstOrNull { it.id == selected.id }
+                            }
+                            ?: providers.firstOrNull()?.also { repository.selectProvider(it.id) },
                     )
                 }
             }
@@ -218,16 +223,24 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
 
     fun saveProvider(name: String, baseUrl: String, model: String, apiKey: String) = safely {
         val provider = repository.saveProvider(name, baseUrl, model, apiKey)
+        repository.selectProvider(provider.id)
         stateValue.update { it.copy(activeProvider = provider) }
     }
 
     fun selectProvider(provider: ProviderConfiguration) {
+        repository.selectProvider(provider.id)
         stateValue.update { it.copy(activeProvider = provider) }
     }
 
     fun testProvider(provider: ProviderConfiguration) = safely {
+        stateValue.update { it.copy(providerTest = null, error = null) }
         val result = repository.testProvider(provider)
-        stateValue.update { it.copy(providerTest = result) }
+        if (result.success) {
+            repository.selectProvider(provider.id)
+            stateValue.update { it.copy(providerTest = result, activeProvider = provider) }
+        } else {
+            stateValue.update { it.copy(providerTest = result) }
+        }
     }
 
     fun saveTelegramBot(
@@ -334,9 +347,9 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun installLinuxEnvironment(name: String, archiveUrl: String, sha256: String) = safely {
+    fun installLinuxEnvironment(name: String, archiveUrl: String, sha256: String) {
         val identifier = name.trim().lowercase().replace(Regex("[^a-z0-9-]"), "-")
-        require(identifier.isNotBlank()) { "An environment name is required." }
+        if (identifier.isBlank()) return fail("An environment name is required.")
         val descriptor = LinuxEnvironmentDescriptor(
             id = identifier,
             displayName = name.trim(),
@@ -344,14 +357,54 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
             archiveUrl = archiveUrl.trim(),
             sha256 = sha256.trim(),
         )
-        repository.rootfsInstaller.install(descriptor).collect(::handleEnvironmentInstallEvent)
+        startEnvironmentInstall(identifier) {
+            repository.rootfsInstaller.install(descriptor).collect(::handleEnvironmentInstallEvent)
+        }
     }
 
-    fun installBundledLinux(distribution: String = "ubuntu") = safely {
-        val descriptor = repository.bundledLinuxDescriptor(distribution)
-        repository.rootfsInstaller.installBundled(descriptor) {
-            repository.bundledLinuxArchive(descriptor)
-        }.collect(::handleEnvironmentInstallEvent)
+    fun installBundledLinux(distribution: String = "ubuntu") {
+        startEnvironmentInstall(distribution) {
+            val descriptor = repository.bundledLinuxDescriptor(distribution)
+            repository.rootfsInstaller.installBundled(descriptor) {
+                repository.bundledLinuxArchive(descriptor)
+            }.collect(::handleEnvironmentInstallEvent)
+        }
+    }
+
+    private fun startEnvironmentInstall(identifier: String, action: suspend () -> Unit) {
+        if (environmentInstallJob?.isActive == true) {
+            stateValue.update {
+                it.copy(environmentStatus = "Linux installation is already running: " + it.environmentInstalling)
+            }
+            return
+        }
+        stateValue.update {
+            it.copy(
+                environmentInstalling = identifier,
+                environmentStatus = "Preparing " + identifier + " for installation",
+                error = null,
+            )
+        }
+        environmentInstallJob = viewModelScope.launch {
+            val taskId = "linux-install-" + identifier
+            try {
+                AgentForegroundService.start(
+                    getApplication(),
+                    taskId,
+                    "Installing the bundled " + identifier + " Linux environment",
+                )
+                action()
+            } catch (failure: Exception) {
+                if (failure !is kotlinx.coroutines.CancellationException) {
+                    fail(failure.message ?: "Linux installation failed.")
+                    stateValue.update { it.copy(environmentStatus = "Installation failed: " + identifier) }
+                }
+            } finally {
+                AgentForegroundService.stop(getApplication(), taskId)
+                refreshEnvironments()
+                stateValue.update { it.copy(environmentInstalling = null) }
+            }
+        }
     }
 
     fun selectLinuxEnvironment(identifier: String?) = safely {
@@ -390,7 +443,11 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
                 "Preparing " + event.downloadedBytes + total + " bytes"
             }
             is EnvironmentInstallEvent.Verifying -> "Verifying SHA-256 checksum"
-            is EnvironmentInstallEvent.Extracting -> "Extracted " + event.filesExtracted + " entries"
+            is EnvironmentInstallEvent.Extracting -> if (event.filesExtracted == 0) {
+                "Extracting Linux files. Keep the app open."
+            } else {
+                "Extracted " + event.filesExtracted + " entries"
+            }
             is EnvironmentInstallEvent.Installed -> "Installed " + event.directory.name
         }
         stateValue.update { it.copy(environmentStatus = status) }
@@ -414,7 +471,10 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
         val current = stateValue.value
         val workspace = current.activeWorkspace
             ?: return fail("Create or select a project before starting an agent task.")
-        val configuration = current.activeProvider
+        val configuration = current.activeProvider ?: current.providers.firstOrNull()?.also {
+            repository.selectProvider(it.id)
+            stateValue.update { state -> state.copy(activeProvider = it) }
+        }
             ?: return fail("Add an AI provider before starting an agent task.")
         if (text.isBlank()) return
 
@@ -722,6 +782,7 @@ class AlaserViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        environmentInstallJob?.cancel()
         telegramJobs.values.forEach { it.cancel() }
         telegramJobs.clear()
         stopInteractiveTerminal()

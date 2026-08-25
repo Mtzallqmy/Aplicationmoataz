@@ -107,8 +107,6 @@ prepare_ubuntu_developer_image() {
 }
 
 prepare_architecture aarch64 arm64-v8a
-prepare_architecture x86_64 x86_64
 prepare_ubuntu_developer_image arm64 arm64-v8a
-prepare_ubuntu_developer_image amd64 x86_64
 
-echo "Prepared full offline Ubuntu and Alpine Linux environments with bundled PRoot executables."
+echo "Prepared ARM64-only offline Ubuntu and Alpine Linux environments with bundled PRoot."

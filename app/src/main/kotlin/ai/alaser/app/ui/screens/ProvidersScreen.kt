@@ -111,9 +111,6 @@ fun ProvidersScreen(
             Button(
                 onClick = {
                     onSave(name, baseUrl, model, key)
-                    name = ""
-                    model = ""
-                    key = ""
                 },
                 enabled = name.isNotBlank() && model.isNotBlank() && key.isNotBlank(),
             ) { Text("Save encrypted provider") }
@@ -132,6 +129,9 @@ fun ProvidersScreen(
             ) {
                 Column(Modifier.padding(14.dp)) {
                     Text(provider.name, style = MaterialTheme.typography.titleMedium)
+                    if (provider.id == state.activeProvider?.id) {
+                        Text("Selected for new agent tasks", color = MaterialTheme.colorScheme.primary)
+                    }
                     Text(provider.defaultModel, color = MaterialTheme.colorScheme.primary)
                     Text(provider.baseUrl, style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { onTest(provider) }) { Text("Test connection") }
@@ -148,7 +148,8 @@ fun ProvidersScreen(
                 Text(
                     if (result.success) {
                         "HTTP " + result.statusCode + " · " + result.latencyMilliseconds + " ms · " +
-                            result.models.size + " models"
+                            result.models.size + " models\n" +
+                            (result.detail ?: "The selected model generated a valid response.")
                     } else {
                         result.detail ?: "HTTP " + result.statusCode
                     },

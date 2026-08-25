@@ -19,7 +19,7 @@ def main() -> int:
             for line in package.read("assets/linux/manifest.properties").decode().splitlines()
             if "=" in line
         )
-        for abi, expected_machine in (("arm64-v8a", 183), ("x86_64", 62)):
+        for abi, expected_machine in (("arm64-v8a", 183),):
             for library in ("libalaser_pty.so", "libproot_exec.so"):
                 binary = package.read(f"lib/{abi}/{library}")
                 if binary[:4] != b"\x7fELF":
@@ -39,6 +39,9 @@ def main() -> int:
             if ubuntu_checksum != manifest[f"{abi}.ubuntu.sha256"]:
                 raise ValueError(f"Bundled Ubuntu developer rootfs checksum mismatch for {abi}")
             print(f"{abi}: verified Ubuntu developer rootfs with complete toolchains ({len(ubuntu):,} bytes)")
+
+        if any(name.startswith("lib/x86_64/") for name in package.namelist()):
+            raise ValueError("The ARM64 release unexpectedly contains x86_64 native libraries")
 
         for notice in ("assets/licenses/AGORA-MIT.txt", "assets/licenses/LOCIANT-MIT.txt"):
             content = package.read(notice).decode()

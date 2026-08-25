@@ -5,11 +5,11 @@ alaser_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 alaser_staging="$(mktemp -d)"
 trap 'rm -rf "$alaser_staging"' EXIT
 mkdir -p "$alaser_staging/rootfs" "$alaser_staging/workspace" "$alaser_staging/tmp"
-tar -xzf "$alaser_root/app/src/main/assets/linux/alpine-x86_64.rootfs" -C "$alaser_staging/rootfs"
+tar -xzf "$alaser_root/app/src/main/assets/linux/alpine-aarch64.rootfs" -C "$alaser_staging/rootfs"
 
 output="$(
     PROOT_TMP_DIR="$alaser_staging/tmp" \
-    "$alaser_root/app/src/main/jniLibs/x86_64/libproot_exec.so" \
+    "$alaser_root/app/src/main/jniLibs/arm64-v8a/libproot_exec.so" \
         --rootfs="$alaser_staging/rootfs" \
         --bind="$alaser_staging/workspace:/workspace" \
         --bind=/dev \
@@ -24,9 +24,9 @@ echo "$output"
 echo "The bundled static PRoot starts Alpine Linux and writes to its bound workspace."
 
 mkdir -p "$alaser_staging/ubuntu"
-tar -xzf "$alaser_root/app/src/main/assets/linux/ubuntu-amd64.rootfs" -C "$alaser_staging/ubuntu"
+tar -xzf "$alaser_root/app/src/main/assets/linux/ubuntu-arm64.rootfs" -C "$alaser_staging/ubuntu"
 PROOT_TMP_DIR="$alaser_staging/tmp" \
-    "$alaser_root/app/src/main/jniLibs/x86_64/libproot_exec.so" \
+    "$alaser_root/app/src/main/jniLibs/arm64-v8a/libproot_exec.so" \
         --rootfs="$alaser_staging/ubuntu" \
         --bind="$alaser_staging/workspace:/workspace" \
         --bind=/dev \

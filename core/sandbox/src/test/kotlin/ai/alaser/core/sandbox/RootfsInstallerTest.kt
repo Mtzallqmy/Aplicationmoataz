@@ -1,6 +1,8 @@
 package ai.alaser.core.sandbox
 
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
@@ -13,6 +15,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 class RootfsInstallerTest {
     @get:Rule
@@ -25,8 +28,8 @@ class RootfsInstallerTest {
         val descriptor = LinuxEnvironmentDescriptor(
             id = "alpine",
             displayName = "Alpine Linux",
-            architecture = "x86_64",
-            archiveUrl = "asset://linux/alpine.tar.gz",
+            architecture = "arm64-v8a",
+            archiveUrl = "asset://linux/alpine-aarch64.rootfs",
             sha256 = RootfsInstaller.checksum(source),
         )
 
@@ -43,13 +46,62 @@ class RootfsInstallerTest {
     }
 
     @Test
+    fun concurrentBundledInstallIsSerializedAndIdempotent() = runBlocking {
+        val archive = rootfsArchive()
+        val source = File(temporary.root, "concurrent.tar.gz").apply { writeBytes(archive) }
+        val descriptor = LinuxEnvironmentDescriptor(
+            id = "ubuntu",
+            displayName = "Ubuntu",
+            architecture = "arm64-v8a",
+            archiveUrl = "asset://linux/ubuntu-arm64.rootfs",
+            sha256 = RootfsInstaller.checksum(source),
+        )
+        val opens = AtomicInteger()
+        val installer = RootfsInstaller(temporary.newFolder("concurrent-environments"))
+
+        val results = listOf(1, 2).map {
+            async {
+                installer.installBundled(descriptor) {
+                    opens.incrementAndGet()
+                    archive.inputStream()
+                }.toList().last() as EnvironmentInstallEvent.Installed
+            }
+        }.awaitAll()
+
+        assertEquals(results[0].directory.canonicalPath, results[1].directory.canonicalPath)
+        assertEquals("Only checksum and extraction should open the bundled archive.", 2, opens.get())
+        assertTrue(File(results[0].directory, "bin/sh").canExecute())
+    }
+
+    @Test
+    fun replacesIncompleteEnvironmentLeftByAnInterruptedInstall() = runBlocking {
+        val archive = rootfsArchive()
+        val source = File(temporary.root, "repair.tar.gz").apply { writeBytes(archive) }
+        val environments = temporary.newFolder("repair-environments")
+        File(environments, "ubuntu").apply { mkdirs(); resolve("partial").writeText("broken") }
+        val descriptor = LinuxEnvironmentDescriptor(
+            id = "ubuntu",
+            displayName = "Ubuntu",
+            architecture = "arm64-v8a",
+            archiveUrl = "asset://linux/ubuntu-arm64.rootfs",
+            sha256 = RootfsInstaller.checksum(source),
+        )
+
+        val installed = RootfsInstaller(environments).installBundled(descriptor) { archive.inputStream() }
+            .toList().last() as EnvironmentInstallEvent.Installed
+
+        assertTrue(File(installed.directory, "bin/sh").canExecute())
+        assertTrue(!File(installed.directory, "partial").exists())
+    }
+
+    @Test
     fun installsOfficialBundledAlpineArchiveWhenAvailable() = runBlocking {
         val archive = System.getenv("ALASER_BUNDLED_ROOTFS")?.let(::File) ?: return@runBlocking
         val descriptor = LinuxEnvironmentDescriptor(
             id = "official-alpine",
             displayName = "Official Alpine Linux",
-            architecture = "x86_64",
-            archiveUrl = "asset://linux/alpine-x86_64.tar.gz",
+            architecture = "arm64-v8a",
+            archiveUrl = "asset://linux/alpine-aarch64.rootfs",
             sha256 = RootfsInstaller.checksum(archive),
         )
         val installed = RootfsInstaller(temporary.newFolder("official-environments"))
@@ -67,8 +119,8 @@ class RootfsInstallerTest {
         val descriptor = LinuxEnvironmentDescriptor(
             id = "ubuntu",
             displayName = "Ubuntu Developer",
-            architecture = "x86_64",
-            archiveUrl = "asset://linux/ubuntu-amd64.rootfs",
+            architecture = "arm64-v8a",
+            archiveUrl = "asset://linux/ubuntu-arm64.rootfs",
             sha256 = RootfsInstaller.checksum(archive),
         )
         val installed = RootfsInstaller(temporary.newFolder("ubuntu-environments"))

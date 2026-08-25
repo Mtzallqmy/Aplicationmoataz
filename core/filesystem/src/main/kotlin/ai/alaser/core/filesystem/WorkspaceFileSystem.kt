@@ -6,6 +6,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.stream.Collectors
 import java.util.zip.ZipInputStream
 
@@ -32,7 +33,9 @@ class WorkspaceFileSystem(root: File) {
         if (relativePath.indexOf('\u0000') >= 0) {
             throw WorkspaceAccessException("NUL bytes are not valid file paths.")
         }
-        val requested = Path.of(relativePath)
+        // The newer java.nio path factory is absent from Android 8's core-oj,
+        // though java.nio.file.Path itself is available from API 26.
+        val requested = Paths.get(relativePath)
         if (requested.isAbsolute) {
             throw WorkspaceAccessException("Absolute paths are not allowed.")
         }
@@ -60,7 +63,8 @@ class WorkspaceFileSystem(root: File) {
         val resolved = resolve(path)
         Files.createDirectories(resolved.parent)
         validateExistingAncestors(resolved)
-        Files.writeString(resolved, content)
+        // The Java 11 text convenience writer is not present on Android 8.
+        Files.write(resolved, content.toByteArray(Charsets.UTF_8))
         entry(resolved)
     }
 

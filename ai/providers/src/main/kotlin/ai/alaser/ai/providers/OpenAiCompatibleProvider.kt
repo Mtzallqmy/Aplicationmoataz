@@ -7,12 +7,16 @@ import ai.alaser.core.model.ModelDescriptor
 import ai.alaser.core.model.ProviderConfiguration
 import ai.alaser.core.model.ToolDescriptor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -61,12 +65,43 @@ class OpenAiCompatibleProvider(
     override suspend fun testConnection(): ProviderConnectionResult {
         val started = System.nanoTime()
         return try {
-            val models = listModels()
+            val models = try {
+                listModels()
+            } catch (failure: ProviderException) {
+                if (failure.statusCode in setOf(401, 403)) throw failure
+                // Some valid OpenAI-compatible servers omit /models. The
+                // generation probe below is the authoritative test.
+                emptyList()
+            }
+            var receivedText = false
+            withTimeout(configuration.timeoutSeconds * 1_000) {
+                streamChat(
+                    ModelRequest(
+                        modelId = configuration.defaultModel,
+                        messages = listOf(
+                            ChatMessage(
+                                id = "provider-probe",
+                                sessionId = "provider-probe",
+                                role = MessageRole.USER,
+                                parts = listOf(MessagePart.Text("Reply with OK.")),
+                                createdAt = System.currentTimeMillis(),
+                            ),
+                        ),
+                        maxOutputTokens = 32,
+                    ),
+                ).collect { event ->
+                    if (event is ModelStreamEvent.TextDelta && event.text.isNotBlank()) receivedText = true
+                }
+            }
+            check(receivedText) {
+                "The provider connected, but model '${configuration.defaultModel}' returned no text. Check the model identifier."
+            }
             ProviderConnectionResult(
                 success = true,
                 latencyMilliseconds = (System.nanoTime() - started) / 1_000_000,
                 statusCode = 200,
                 models = models,
+                detail = "The selected model completed a real streaming generation.",
             )
         } catch (exception: ProviderException) {
             ProviderConnectionResult(
@@ -81,6 +116,22 @@ class OpenAiCompatibleProvider(
                 latencyMilliseconds = (System.nanoTime() - started) / 1_000_000,
                 statusCode = 0,
                 detail = exception.message ?: "The provider connection failed.",
+            )
+        } catch (exception: TimeoutCancellationException) {
+            ProviderConnectionResult(
+                success = false,
+                latencyMilliseconds = (System.nanoTime() - started) / 1_000_000,
+                statusCode = 0,
+                detail = "The model generation test timed out.",
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (exception: Exception) {
+            ProviderConnectionResult(
+                success = false,
+                latencyMilliseconds = (System.nanoTime() - started) / 1_000_000,
+                statusCode = 0,
+                detail = exception.message ?: "The model generation test failed.",
             )
         }
     }

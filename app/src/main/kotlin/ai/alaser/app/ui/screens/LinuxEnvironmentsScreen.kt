@@ -49,14 +49,30 @@ fun LinuxEnvironmentsScreen(
         item {
             Button(
                 onClick = { onInstallBundled("ubuntu") },
-                enabled = "ubuntu" !in state.installedEnvironments,
-            ) { Text(if ("ubuntu" in state.installedEnvironments) "Ubuntu Developer installed" else "Install Ubuntu with all development tools") }
+                enabled = "ubuntu" !in state.installedEnvironments && state.environmentInstalling == null,
+            ) {
+                Text(
+                    when {
+                        "ubuntu" in state.installedEnvironments -> "Ubuntu Developer installed"
+                        state.environmentInstalling == "ubuntu" -> "Installing Ubuntu…"
+                        else -> "Install Ubuntu with all development tools"
+                    },
+                )
+            }
         }
         item {
             Button(
                 onClick = { onInstallBundled("alpine") },
-                enabled = "alpine" !in state.installedEnvironments,
-            ) { Text(if ("alpine" in state.installedEnvironments) "Alpine Linux installed" else "Install bundled Alpine Linux") }
+                enabled = "alpine" !in state.installedEnvironments && state.environmentInstalling == null,
+            ) {
+                Text(
+                    when {
+                        "alpine" in state.installedEnvironments -> "Alpine Linux installed"
+                        state.environmentInstalling == "alpine" -> "Installing Alpine…"
+                        else -> "Install bundled Alpine Linux"
+                    },
+                )
+            }
         }
         item {
             Text(
@@ -99,7 +115,8 @@ fun LinuxEnvironmentsScreen(
         item {
             Button(
                 onClick = { onInstall(name, url, checksum) },
-                enabled = name.isNotBlank() && url.startsWith("https://") && checksum.length == 64,
+                enabled = state.environmentInstalling == null && name.isNotBlank() &&
+                    url.startsWith("https://") && checksum.length == 64,
             ) { Text("Download and verify rootfs") }
         }
         state.environmentStatus?.let { status ->

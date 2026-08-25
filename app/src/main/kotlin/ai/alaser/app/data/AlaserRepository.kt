@@ -114,6 +114,13 @@ class AlaserRepository(context: Context) {
     suspend fun testProvider(configuration: ProviderConfiguration): ProviderConnectionResult =
         provider(configuration).testConnection()
 
+    fun selectedProviderId(): String? = preferences.getString("selected_provider_id", null)
+
+    fun selectProvider(identifier: String) {
+        require(providersValue.value.any { it.id == identifier }) { "The selected AI provider does not exist." }
+        preferences.edit().putString("selected_provider_id", identifier).apply()
+    }
+
     suspend fun createSession(
         workspace: Workspace,
         provider: ProviderConfiguration,
@@ -225,7 +232,11 @@ class AlaserRepository(context: Context) {
         McpHttpClient(configuration)
 
     fun linuxEnvironments(): List<File> =
-        environmentsDirectory.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }.orEmpty()
+        environmentsDirectory.listFiles()?.filter { directory ->
+            directory.isDirectory &&
+                !directory.name.endsWith(".installing") &&
+                (File(directory, "bin/sh").isFile || File(directory, "usr/bin/sh").isFile)
+        }?.sortedBy { it.name }.orEmpty()
 
     fun bundledLinuxDescriptor(distribution: String = "ubuntu"): LinuxEnvironmentDescriptor {
         require(distribution in setOf("ubuntu", "alpine")) { "Unsupported bundled Linux distribution." }
