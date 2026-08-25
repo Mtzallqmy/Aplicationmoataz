@@ -1,0 +1,80 @@
+name: Publish Alaser AI v0.1.1 ARM64
+
+on:
+  push:
+    paths:
+      - .github/workflows/publish-v0.1.1-arm64.yml
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 95f61c59f6110a33f637effb1e17066784be9f1e
+      - name: Download the fully verified ARM64 APK
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 32906642004
+          name: alaser-debug-apk
+      - name: Verify the installable APK again
+        shell: bash
+        run: |
+          sdk_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$sdk_tools/apksigner" verify --verbose --print-certs app-debug.apk
+          "$sdk_tools/aapt" dump badging app-debug.apk | tee apk-badging.txt
+          grep -F "sdkVersion:'26'" apk-badging.txt
+          grep -F "native-code: 'arm64-v8a'" apk-badging.txt
+          python3 scripts/verify-apk.py app-debug.apk
+      - name: Create the download ZIP and checksums
+        shell: bash
+        run: |
+          mv app-debug.apk Alaser-AI-v0.1.1-ARM64-Android8.apk
+          zip -0 Alaser-AI-v0.1.1-ARM64-Android8.zip Alaser-AI-v0.1.1-ARM64-Android8.apk
+          sha256sum Alaser-AI-v0.1.1-ARM64-Android8.apk Alaser-AI-v0.1.1-ARM64-Android8.zip | tee SHA256SUMS
+          apk_sha="$(awk '/\.apk$/ {print $1}' SHA256SUMS)"
+          zip_sha="$(awk '/\.zip$/ {print $1}' SHA256SUMS)"
+          cat > release-notes.md <<NOTES
+          إصلاح جذري للأعطال التي ظهرت على Android 8 في الإصدار السابق.
+
+          الإصلاحات:
+          - استبدال Java Path/Files APIs غير الموجودة في Android 8.
+          - منع تثبيتين متزامنين لبيئة Linux وتنظيف أي تثبيت جزئي تلقائيًا.
+          - علامة اكتمال SHA-256 تمنع اعتبار rootfs التالف مثبتًا.
+          - استخراج Ubuntu مباشرة مع خدمة أمامية تحمي العملية الطويلة.
+          - حفظ مزود AI المختار، واختباره بتوليد Streaming حقيقي لا بطلب models فقط.
+          - APK مخصص لمعمارية ARM64 فقط، ويدعم Android 8.0 (API 26) فأحدث.
+          - Ubuntu 24.04 وAlpine وPRoot وكل toolchains مدمجة للعمل دون تنزيل خارجي.
+
+          الملف: Alaser-AI-v0.1.1-ARM64-Android8.zip
+          ZIP SHA-256: $zip_sha
+          APK SHA-256: $apk_sha
+
+          ملاحظة ترقية: احذف v0.1.0 قبل تثبيت v0.1.1 لأن مفتاح توقيع نسخة التصحيح السابقة لم يُحفظ في CI. سيؤدي الحذف إلى إزالة بيانات النسخة القديمة.
+          NOTES
+      - name: Publish the fixed GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          tag='v0.1.1-arm64-android8'
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title 'Alaser AI v0.1.1 — ARM64 Android 8+ (fixed)' --notes-file release-notes.md --latest
+          else
+            gh release create "$tag" --target 95f61c59f6110a33f637effb1e17066784be9f1e \
+              --title 'Alaser AI v0.1.1 — ARM64 Android 8+ (fixed)' \
+              --notes-file release-notes.md --latest
+          fi
+          gh release upload "$tag" Alaser-AI-v0.1.1-ARM64-Android8.zip SHA256SUMS --clobber
+      - name: Verify the public release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view v0.1.1-arm64-android8 --json url,isDraft,isPrerelease,assets \
+            --jq '{url, isDraft, isPrerelease, assets: [.assets[] | {name, size, digest, url}]}'
