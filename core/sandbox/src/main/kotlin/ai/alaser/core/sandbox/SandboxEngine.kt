@@ -133,7 +133,7 @@ class RootfsInstaller(
 
     private fun existingEnvironment(descriptor: LinuxEnvironmentDescriptor): File? {
         val destination = File(environmentsDirectory, descriptor.id)
-        if (usableEnvironment(destination)) return destination
+        if (usableEnvironment(destination, descriptor)) return destination
         if (destination.exists()) {
             check(destination.deleteRecursively()) { "The incomplete Linux environment could not be removed." }
         }
@@ -144,9 +144,16 @@ class RootfsInstaller(
         return null
     }
 
-    private fun usableEnvironment(directory: File): Boolean =
+    private fun containsShell(directory: File): Boolean =
         directory.isDirectory &&
             (File(directory, "bin/sh").isFile || File(directory, "usr/bin/sh").isFile)
+
+    private fun usableEnvironment(directory: File, descriptor: LinuxEnvironmentDescriptor): Boolean =
+        containsShell(directory) &&
+            File(directory, COMPLETION_MARKER).takeIf(File::isFile)
+                ?.readText()
+                ?.trim()
+                ?.equals(descriptor.sha256, ignoreCase = true) == true
 
     private suspend fun FlowCollector<EnvironmentInstallEvent>.installBundledArchive(
         descriptor: LinuxEnvironmentDescriptor,
@@ -216,7 +223,8 @@ class RootfsInstaller(
     }
 
     private fun finishInstallation(descriptor: LinuxEnvironmentDescriptor, staging: File) {
-        check(usableEnvironment(staging)) { "The extracted image does not contain a usable Linux shell." }
+        check(containsShell(staging)) { "The extracted image does not contain a usable Linux shell." }
+        File(staging, COMPLETION_MARKER).writeText(descriptor.sha256.lowercase())
         val destination = File(environmentsDirectory, descriptor.id)
         check(!destination.exists()) { "A completed Linux environment already exists." }
         check(staging.renameTo(destination)) { "The verified Linux environment could not be activated atomically." }
@@ -293,6 +301,8 @@ class RootfsInstaller(
     }
 
     companion object {
+        const val COMPLETION_MARKER = ".alaser-installed"
+
         fun checksum(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")
             file.inputStream().buffered().use { input ->

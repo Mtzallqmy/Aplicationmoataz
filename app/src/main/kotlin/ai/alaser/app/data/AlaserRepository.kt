@@ -235,6 +235,7 @@ class AlaserRepository(context: Context) {
         environmentsDirectory.listFiles()?.filter { directory ->
             directory.isDirectory &&
                 !directory.name.endsWith(".installing") &&
+                File(directory, RootfsInstaller.COMPLETION_MARKER).isFile &&
                 (File(directory, "bin/sh").isFile || File(directory, "usr/bin/sh").isFile)
         }?.sortedBy { it.name }.orEmpty()
 

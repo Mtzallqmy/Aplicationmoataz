@@ -78,7 +78,11 @@ class RootfsInstallerTest {
         val archive = rootfsArchive()
         val source = File(temporary.root, "repair.tar.gz").apply { writeBytes(archive) }
         val environments = temporary.newFolder("repair-environments")
-        File(environments, "ubuntu").apply { mkdirs(); resolve("partial").writeText("broken") }
+        File(environments, "ubuntu").apply {
+            resolve("bin").mkdirs()
+            resolve("bin/sh").writeText("incomplete shell")
+            resolve("partial").writeText("broken")
+        }
         val descriptor = LinuxEnvironmentDescriptor(
             id = "ubuntu",
             displayName = "Ubuntu",
@@ -92,6 +96,7 @@ class RootfsInstallerTest {
 
         assertTrue(File(installed.directory, "bin/sh").canExecute())
         assertTrue(!File(installed.directory, "partial").exists())
+        assertEquals(descriptor.sha256, File(installed.directory, RootfsInstaller.COMPLETION_MARKER).readText())
     }
 
     @Test
