@@ -1,80 +1,118 @@
-name: Publish Alaser AI v0.1.1 ARM64
+name: Publish Alaser AI v0.1.2 ARM64
 
 on:
   push:
+    branches: [main]
     paths:
+      - app/build.gradle.kts
+      - core/sandbox/**
+      - scripts/prepare-linux-runtime.sh
+      - scripts/verify-linux-runtime.sh
+      - scripts/verify-apk.py
       - .github/workflows/publish-v0.1.1-arm64.yml
+  workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
-      actions: read
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
-          ref: 95f61c59f6110a33f637effb1e17066784be9f1e
-      - name: Download the fully verified ARM64 APK
-        uses: actions/download-artifact@v4
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: 32906642004
-          name: alaser-debug-apk
-      - name: Verify the installable APK again
+          gradle-version: "8.10.2"
+      - name: Reject Java APIs unavailable on Android 8
+        run: bash scripts/check-android8-compatibility.sh
+      - name: Compile and run fast module tests
+        run: gradle :app:compileDebugKotlin :core:filesystem:test :core:terminal:test :ai:providers:test :agent:runtime:test
+      - name: Enable ARM64 image preparation and execution
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Restore verified ARM64 Linux runtime cache
+        id: linux-runtime-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/assets/linux
+            app/src/main/jniLibs/arm64-v8a/libproot_exec.so
+          key: alaser-linux-arm64-${{ hashFiles('scripts/prepare-linux-runtime.sh') }}
+      - name: Prepare verified offline Linux runtime
+        if: steps.linux-runtime-cache.outputs.cache-hit != 'true'
+        run: bash scripts/prepare-linux-runtime.sh
+      - name: Verify real ARM64 Linux root filesystems and toolchains
+        run: bash scripts/verify-linux-runtime.sh
+      - name: Run all JVM tests against the exact bundled rootfs archives
+        env:
+          ALASER_BUNDLED_ROOTFS: ${{ github.workspace }}/app/src/main/assets/linux/alpine-aarch64.rootfs
+          ALASER_BUNDLED_UBUNTU: ${{ github.workspace }}/app/src/main/assets/linux/ubuntu-arm64.rootfs
+        run: gradle test
+      - name: Run Android lint
+        run: gradle :app:lintDebug
+      - name: Build APK from this exact commit
+        run: gradle :app:assembleDebug
+      - name: Verify APK payload and Android 8 ARM64 contract
         shell: bash
         run: |
+          apk='app/build/outputs/apk/debug/app-debug.apk'
+          python3 scripts/verify-apk.py "$apk"
           sdk_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          "$sdk_tools/apksigner" verify --verbose --print-certs app-debug.apk
-          "$sdk_tools/aapt" dump badging app-debug.apk | tee apk-badging.txt
+          "$sdk_tools/apksigner" verify --verbose --print-certs "$apk"
+          "$sdk_tools/aapt" dump badging "$apk" | tee apk-badging.txt
           grep -F "sdkVersion:'26'" apk-badging.txt
           grep -F "native-code: 'arm64-v8a'" apk-badging.txt
-          python3 scripts/verify-apk.py app-debug.apk
-      - name: Create the download ZIP and checksums
+          grep -F "versionName='0.1.2'" apk-badging.txt
+      - name: Create immutable release bundle and checksums
         shell: bash
         run: |
-          mv app-debug.apk Alaser-AI-v0.1.1-ARM64-Android8.apk
-          zip -0 Alaser-AI-v0.1.1-ARM64-Android8.zip Alaser-AI-v0.1.1-ARM64-Android8.apk
-          sha256sum Alaser-AI-v0.1.1-ARM64-Android8.apk Alaser-AI-v0.1.1-ARM64-Android8.zip | tee SHA256SUMS
+          cp app/build/outputs/apk/debug/app-debug.apk Alaser-AI-v0.1.2-ARM64-Android8.apk
+          zip -0 Alaser-AI-v0.1.2-ARM64-Android8.zip Alaser-AI-v0.1.2-ARM64-Android8.apk
+          sha256sum Alaser-AI-v0.1.2-ARM64-Android8.apk Alaser-AI-v0.1.2-ARM64-Android8.zip | tee SHA256SUMS
           apk_sha="$(awk '/\.apk$/ {print $1}' SHA256SUMS)"
           zip_sha="$(awk '/\.zip$/ {print $1}' SHA256SUMS)"
           cat > release-notes.md <<NOTES
-          إصلاح جذري للأعطال التي ظهرت على Android 8 في الإصدار السابق.
+          إصلاح فعلي لمسار تثبيت وتشغيل بيئات Linux على Android 8 ARM64.
 
-          الإصلاحات:
-          - استبدال Java Path/Files APIs غير الموجودة في Android 8.
-          - منع تثبيتين متزامنين لبيئة Linux وتنظيف أي تثبيت جزئي تلقائيًا.
-          - علامة اكتمال SHA-256 تمنع اعتبار rootfs التالف مثبتًا.
-          - استخراج Ubuntu مباشرة مع خدمة أمامية تحمي العملية الطويلة.
-          - حفظ مزود AI المختار، واختباره بتوليد Streaming حقيقي لا بطلب models فقط.
-          - APK مخصص لمعمارية ARM64 فقط، ويدعم Android 8.0 (API 26) فأحدث.
-          - Ubuntu 24.04 وAlpine وPRoot وكل toolchains مدمجة للعمل دون تنزيل خارجي.
+          ما تم التحقق منه قبل النشر:
+          - استخراج Ubuntu وAlpine الحقيقيين من نفس ملفات rootfs المضمّنة في APK.
+          - دعم merged-/usr والروابط الرمزية داخل rootfs بدون السماح بالهروب خارج مجلد البيئة.
+          - استبدال إدخالات tar المكررة بأمان ودعم hard links التي يظهر هدفها لاحقًا في الأرشيف.
+          - تشغيل PRoot بوضع root-id حتى تعمل apt/apk وأدوات التطوير بصلاحيات root افتراضية داخل البيئة.
+          - تشغيل Ubuntu ARM64 والتحقق من Python وGit وNode/npm وGCC وGo وRust/Cargo وJava.
+          - تشغيل Alpine ARM64 والتحقق من الكتابة إلى /workspace.
+          - اختبارات JVM كاملة وAndroid lint وفحص APK وminSdk 26 وARM64 فقط.
 
-          الملف: Alaser-AI-v0.1.1-ARM64-Android8.zip
+          هذا الإصدار بُني من commit: $GITHUB_SHA
           ZIP SHA-256: $zip_sha
           APK SHA-256: $apk_sha
 
-          ملاحظة ترقية: احذف v0.1.0 قبل تثبيت v0.1.1 لأن مفتاح توقيع نسخة التصحيح السابقة لم يُحفظ في CI. سيؤدي الحذف إلى إزالة بيانات النسخة القديمة.
+          ملاحظة الترقية: هذا المشروع لا يملك حتى الآن مفتاح توقيع Release دائمًا محفوظًا في GitHub Secrets. إذا رفض Android الترقية فوق نسخة سابقة بسبب اختلاف التوقيع، احذف النسخة السابقة ثم ثبّت 0.1.2. لا تُحذف النسخة القديمة إلا بعد حفظ أي بيانات تحتاجها.
           NOTES
-      - name: Publish the fixed GitHub Release
+      - name: Publish only the artifact built and verified in this job
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          tag='v0.1.1-arm64-android8'
+          tag='v0.1.2-arm64-android8'
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title 'Alaser AI v0.1.1 — ARM64 Android 8+ (fixed)' --notes-file release-notes.md --latest
+            gh release edit "$tag" --target "$GITHUB_SHA" --title 'Alaser AI v0.1.2 — ARM64 Android 8+ Linux runtime fix' --notes-file release-notes.md --latest
           else
-            gh release create "$tag" --target 95f61c59f6110a33f637effb1e17066784be9f1e \
-              --title 'Alaser AI v0.1.1 — ARM64 Android 8+ (fixed)' \
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title 'Alaser AI v0.1.2 — ARM64 Android 8+ Linux runtime fix' \
               --notes-file release-notes.md --latest
           fi
-          gh release upload "$tag" Alaser-AI-v0.1.1-ARM64-Android8.zip SHA256SUMS --clobber
-      - name: Verify the public release assets
+          gh release upload "$tag" Alaser-AI-v0.1.2-ARM64-Android8.zip SHA256SUMS --clobber
+      - name: Verify public release assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release view v0.1.1-arm64-android8 --json url,isDraft,isPrerelease,assets \
-            --jq '{url, isDraft, isPrerelease, assets: [.assets[] | {name, size, digest, url}]}'
+          gh release view v0.1.2-arm64-android8 --json url,targetCommitish,isDraft,isPrerelease,assets \
+            --jq '{url, targetCommitish, isDraft, isPrerelease, assets: [.assets[] | {name, size, digest, url}]}'
