@@ -243,6 +243,11 @@ class RootfsInstaller(
             while (true) {
                 val entry = input.nextEntry ?: break
                 val path = lexicalDestination(root, entry.name)
+                if (path == root) {
+                    require(entry.isDirectory) { "A ZIP entry attempted to replace the extraction root." }
+                    count++
+                    continue
+                }
                 if (entry.isDirectory) {
                     Files.createDirectories(path)
                 } else {
@@ -267,6 +272,11 @@ class RootfsInstaller(
             while (true) {
                 val entry = input.nextTarEntry ?: break
                 val lexicalPath = lexicalDestination(root, entry.name)
+                if (lexicalPath == root) {
+                    require(entry.isDirectory) { "A tar entry attempted to replace the staged root filesystem." }
+                    count++
+                    continue
+                }
                 val path = resolveTarDestination(root, lexicalPath)
                 when {
                     entry.isDirectory -> {
@@ -313,6 +323,8 @@ class RootfsInstaller(
     /**
      * Returns the lexical in-root location for an archive entry. This rejects
      * `..` traversal and absolute host paths before any filesystem operation.
+     * A root-directory entry such as `./` is allowed and handled as a no-op by
+     * the extraction loops above.
      */
     private fun lexicalDestination(root: Path, entryName: String): Path {
         require(entryName.isNotBlank()) { "An archive entry had an empty path." }
@@ -320,7 +332,7 @@ class RootfsInstaller(
         val raw = Paths.get(cleanName)
         require(!raw.isAbsolute) { "An archive entry attempted to use an absolute host path." }
         val target = root.resolve(raw).normalize()
-        require(target.startsWith(root) && target != root) {
+        require(target.startsWith(root)) {
             "An archive entry attempted to escape its destination."
         }
         return target
